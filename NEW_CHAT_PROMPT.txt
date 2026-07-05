@@ -1,0 +1,26 @@
+Paste this as the first message in a new chat opened in D:\IntelliTrade
+========================================================================
+
+I'm continuing work on IntelliTrade — my personal Windows algo-trading app for BTC/ETH/Gold
+on Vantage MT5 (Python/FastAPI backend on :8100, Next.js frontend on :3000), in D:\IntelliTrade.
+
+Before doing anything, read these for full context (they load with the project but read them
+carefully):
+1. D:\IntelliTrade\CLAUDE.md  — the operational source of truth: how to run, the traceable
+   pipeline (Market->...->Execution->Monitoring->Learning), the pages, the 3-app ports/terminals/
+   accounts table, safety gating, state files, key endpoints, and gotchas.
+2. The auto-memory files (intellitrade-overview, -telegram-alerts, -backtest-costs, -events-ticker)
+   — durable design decisions I don't want reversed without asking.
+
+Key facts to keep in mind:
+- Run with Start-IntelliTrade.bat (self-cleans ports). MT5 terminal D:\MT5IntelliTrade must be open
+  and logged into demo account 25600027 (VantageMarkets-Demo) first. Gold symbol = XAUUSD+.
+- .env changes need a backend restart. Never run `npm run build` while `npm run dev` is running.
+- Three apps coexist (IntelliTrade 3000/8100, smart-money-trader 5173/8000, alphaedge 5001/5000);
+  each pins its own MT5 terminal by path. IntelliTrade order magic = 770011.
+- Live trading is gated (ALLOW_LIVE + verified LIVE terminal); never place trades on my behalf —
+  I click the buttons / flip the autonomous toggle myself.
+- Currently on DEMO. Scanner is alert-only by default.
+
+When unsure whether code matches these notes, verify against the actual files (they may have
+changed since the notes were written). Then wait for my task.

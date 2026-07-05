@@ -1,0 +1,17 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+python-dotenv==1.0.1
+httpx==0.28.1
+pandas==2.2.3
+numpy==2.2.1
+pyarrow==18.1.0
+scikit-learn==1.6.0
+joblib==1.4.2
+APScheduler==3.11.0
+# Windows only — install on the trading laptop:
+MetaTrader5==5.0.4874 ; sys_platform == "win32"
+# RAG (optional, enable when wiring the Wiki gatekeeper):
+# chromadb==0.5.23
+# openai==1.59.6

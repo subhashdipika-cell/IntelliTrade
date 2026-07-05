@@ -1,0 +1,17 @@
+# ── SECRETS — never commit (MT5 live/demo credentials, ALLOW_LIVE) ──
+.env
+.env.*
+!.env.example
+
+# ── deps / envs / caches ─────────────────────────────
+node_modules/
+.next/
+.venv/
+backend/.venv/
+__pycache__/
+*.pyc
+*.log
+
+# ── runtime state (money/scanner settings, trade history, ML models,
+#    market CSVs, holiday cache) — operational data, not source ──
+backend/app/data/
