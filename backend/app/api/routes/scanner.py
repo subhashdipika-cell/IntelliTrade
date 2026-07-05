@@ -21,6 +21,8 @@ class ScannerPatch(BaseModel):
     strategies: list[str] | None = None
     timeframe: str | None = None
     wiki_enabled: bool | None = None
+    # Per-asset override of `strategies` (backtest-driven selection)
+    strategies_by_asset: dict[str, list[str]] | None = None
 
 
 @router.get("/settings")

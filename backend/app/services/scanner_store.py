@@ -31,6 +31,12 @@ class ScannerSettings:
     strategies: list[str] = field(default_factory=lambda: ["donchian_breakout"])
     timeframe: str = "H1"
     wiki_enabled: bool = True
+    # Per-asset strategy selection — when an asset has an entry here it
+    # OVERRIDES the global `strategies` list for that asset. Added 2026-07-05
+    # after the 3000-bar H1 matrix backtest showed each asset has different
+    # winners (e.g. macd_cross +21% on GOLD but -15% on BTC; rsi_reversion
+    # +6.6% on ETH but -27.7% on GOLD). Empty dict = old behavior.
+    strategies_by_asset: dict = field(default_factory=dict)
 
 
 class ScannerStore:

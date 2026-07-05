@@ -54,8 +54,12 @@ class SignalScanner:
         bar_time = str(df.index[-1])
         daily_loss = self._daily_loss_pct()
 
+        # Per-asset strategy list when configured (backtest-driven selection),
+        # else the global deployed list — see scanner_store.ScannerSettings.
+        asset_strategies = (getattr(s, "strategies_by_asset", None) or {}).get(asset) or s.strategies
+
         # Run every deployed strategy on this asset's latest closed bar.
-        for strat in s.strategies:
+        for strat in asset_strategies:
             key = f"{asset}:{s.timeframe}:{strat}"
             if self._last_bar.get(key) == bar_time:
                 continue  # this strategy already processed this bar
