@@ -18,18 +18,19 @@ export function Sidebar() {
   const pathname = usePathname();
   return (
     <aside className="w-60 h-screen bg-[#0a0d12] border-r border-gray-800 flex flex-col">
-      <button
-        onClick={() => window.location.reload()}
-        title="Click to refresh"
-        aria-label="Refresh"
+      {/* Logo = Home (the dashboard banner is the refresh button) */}
+      <Link
+        href="/"
+        title="Go to Dashboard"
+        aria-label="Home"
         className="group relative block w-full border-b border-gray-800 p-3 hover:bg-gray-900/40 transition focus:outline-none"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.png" alt="IntelliTrade" className="w-full h-auto rounded-md block" />
         <span className="absolute inset-0 hidden group-hover:flex items-center justify-center gap-1 bg-black/55 text-white text-xs font-semibold backdrop-blur-[1px]">
-          ↻ Refresh
+          🏠 Home
         </span>
-      </button>
+      </Link>
       <nav className="p-3 space-y-1 flex-1">
         {NAV.map((item) => {
           const active = pathname === item.path;
