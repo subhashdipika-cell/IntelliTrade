@@ -26,7 +26,7 @@ export function Sidebar() {
         className="group relative block w-full border-b border-gray-800 p-3 hover:bg-gray-900/40 transition focus:outline-none"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.png" alt="IntelliTrade" className="w-full h-auto rounded-md block" />
+        <img src="/logo.webp" alt="IntelliTrade" className="w-full h-auto rounded-md block" />
         <span className="absolute inset-0 hidden group-hover:flex items-center justify-center gap-1 bg-black/55 text-white text-xs font-semibold backdrop-blur-[1px]">
           🏠 Home
         </span>

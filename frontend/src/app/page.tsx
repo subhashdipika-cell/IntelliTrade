@@ -42,7 +42,7 @@ export default function Dashboard() {
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/intellitrade-banner.png"
+          src="/intellitrade-banner.webp"
           alt="IntelliTrade — the most methodical and disciplined trade engineer"
           className="w-full h-auto select-none"
           draggable={false}
