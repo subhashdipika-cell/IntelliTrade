@@ -33,6 +33,22 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Banner — click to refresh the dashboard */}
+      <button
+        onClick={() => window.location.reload()}
+        title="Click to refresh"
+        aria-label="Refresh dashboard"
+        className="block w-full rounded-xl overflow-hidden border border-gray-800 cursor-pointer transition-all hover:border-gray-600 hover:brightness-110 active:scale-[0.995] focus:outline-none focus:ring-1 focus:ring-emerald-700"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/intellitrade-banner.png"
+          alt="IntelliTrade — the most methodical and disciplined trade engineer"
+          className="w-full h-auto select-none"
+          draggable={false}
+        />
+      </button>
+
       {/* Header: logo (refresh) left, status right */}
       <header className="flex items-center justify-between gap-4 bg-gradient-to-r from-[#0a0d12] to-[#0d1117] border border-gray-800 rounded-xl px-5 py-3">
         <div>
