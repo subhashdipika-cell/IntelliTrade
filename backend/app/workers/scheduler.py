@@ -15,6 +15,7 @@ log = get_logger("workers.scheduler")
 POLL_SECONDS = 15
 SCAN_SECONDS = 60  # per-bar dedupe means this only acts on new closed bars
 SNAPSHOT_DAYS = 7  # weekly backtest snapshot → Obsidian vault
+RETRAIN_DAYS = 7   # weekly ML-filter retrain on fresh price history
 
 _scheduler: BackgroundScheduler | None = None
 
@@ -26,6 +27,23 @@ def _weekly_snapshot() -> None:
         log.info("Weekly backtest snapshot: %s", res.get("path") or res.get("error"))
     except Exception as exc:  # noqa: BLE001 — must not kill the scheduler
         log.warning("Weekly snapshot failed: %s", exc)
+
+
+def _weekly_ml_retrain() -> None:
+    """Retrain the per-asset ML meta-label filters on fresh H1 history — the
+    same work as POST /ai/train, on a schedule so the models never go stale."""
+    try:
+        from app.ai_engine.model_trainer import train_asset
+        from app.core.constants import SUPPORTED_ASSETS
+        from app.services.mt5_client import mt5_client
+        for asset in SUPPORTED_ASSETS:
+            df = mt5_client.fetch_ohlcv(asset, "H1", 5000)
+            res = train_asset(asset, df, horizon=5)
+            log.info("Weekly ML retrain %s: %s", asset,
+                     {k: res.get(k) for k in ("trained", "accuracy", "samples", "error")
+                      if k in (res or {})})
+    except Exception as exc:  # noqa: BLE001 — must not kill the scheduler
+        log.warning("Weekly ML retrain failed: %s", exc)
 
 
 def start_scheduler() -> None:
@@ -57,9 +75,17 @@ def start_scheduler() -> None:
         max_instances=1,
         coalesce=True,
     )
+    _scheduler.add_job(
+        _weekly_ml_retrain,
+        trigger="interval",
+        days=RETRAIN_DAYS,
+        id="weekly_ml_retrain",
+        max_instances=1,
+        coalesce=True,
+    )
     _scheduler.start()
-    log.info("Scheduler started (monitor %ss, scanner %ss, snapshot %sd).",
-             POLL_SECONDS, SCAN_SECONDS, SNAPSHOT_DAYS)
+    log.info("Scheduler started (monitor %ss, scanner %ss, snapshot %sd, retrain %sd).",
+             POLL_SECONDS, SCAN_SECONDS, SNAPSHOT_DAYS, RETRAIN_DAYS)
 
 
 def stop_scheduler() -> None:
