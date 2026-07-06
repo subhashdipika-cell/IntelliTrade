@@ -169,6 +169,7 @@ class MT5Client:
                 "tp": float(p.tp),
                 "lots": float(p.volume),
                 "opened_at": datetime.fromtimestamp(p.time, tz=timezone.utc).isoformat(),
+                "strategy": strategy_from_comment(getattr(p, "comment", "")),
             })
         return out
 
@@ -239,6 +240,7 @@ class MT5Client:
                 "reason": _deal_reason_str(exit_.reason),
                 "opened_at": datetime.fromtimestamp(entry.time, tz=timezone.utc).isoformat(),
                 "closed_at": datetime.fromtimestamp(exit_.time, tz=timezone.utc).isoformat(),
+                "strategy": strategy_from_comment(getattr(entry, "comment", "")),
             })
         return out
 
@@ -277,9 +279,13 @@ class MT5Client:
         return mt5.order_calc_margin(order_type, symbol, lots, price)
 
     def place_order(self, asset: str, direction: str, lots: float,
-                    sl: float, tp: float) -> dict:
+                    sl: float, tp: float, strategy: str | None = None) -> dict:
         """Send a market order to MT5. Returns
-        {ok, ticket, price, retcode, reason}. Never raises."""
+        {ok, ticket, price, retcode, reason}. Never raises.
+
+        `strategy` is stamped into the order comment ("IT <name>") so trades
+        that outlive a backend restart — or close while it's down — can be
+        re-attributed from MT5 instead of landing in History as strategy=None."""
         symbol = to_terminal_symbol(asset)
         log.info("ORDER %s %s %.2f lots sl=%s tp=%s", direction, symbol, lots, sl, tp)
         if not MT5_AVAILABLE or not self._connected:
@@ -310,7 +316,7 @@ class MT5Client:
             "tp": float(tp),
             "deviation": 20,                 # max slippage in points
             "magic": _MAGIC,
-            "comment": "IntelliTrade",
+            "comment": (f"IT {strategy}"[:31] if strategy else "IntelliTrade"),
             "type_time": mt5.ORDER_TIME_GTC,
             "type_filling": self._filling_mode(info),
         }
@@ -424,6 +430,15 @@ class MT5Client:
         if flags & getattr(mt5, "SYMBOL_FILLING_FOK", 1):
             return mt5.ORDER_FILLING_FOK
         return mt5.ORDER_FILLING_RETURN
+
+
+def strategy_from_comment(comment: str) -> str | None:
+    """Recover the strategy name from an 'IT <name>' order comment (None if
+    the order predates comment-stamping or was tagged plain 'IntelliTrade')."""
+    c = (comment or "").strip()
+    if c.startswith("IT ") and len(c) > 3:
+        return c[3:].strip() or None
+    return None
 
 
 mt5_client = MT5Client()

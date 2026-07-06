@@ -31,6 +31,7 @@ class ExecutionStage(Stage):
         result = mt5_client.place_order(
             asset=sig.asset, direction=sig.direction.value,
             lots=sig.lots, sl=sig.stop_loss, tp=sig.target,
+            strategy=ctx.strategy,   # stamped into the MT5 comment for attribution
         )
         if not result.get("ok"):
             ctx.record(Decision(self.name, Verdict.BLOCK,

@@ -97,6 +97,9 @@ def reattach_open_trades() -> int:
                             p["sl"], p["tp"], "H1", p["lots"])
         ctx.ticket = p["ticket"]
         ctx.total_capital = equity
+        # Recover the strategy from the MT5 order comment ("IT <name>") so a
+        # restart no longer erases attribution in History.
+        ctx.strategy = p.get("strategy")
         ctx.record(Decision("reattach", Verdict.INFO,
                             "Re-attached open position to monitor after restart.",
                             at=p["opened_at"]))
@@ -126,7 +129,7 @@ def reconcile_from_mt5(days: int = 7) -> int:
         record = {
             "ticket": pid,
             "asset": rev.get(t["symbol"], t["symbol"]),
-            "strategy": None,                      # unknown for backfilled trades
+            "strategy": t.get("strategy"),         # from the "IT <name>" MT5 comment (None for pre-stamping trades)
             "direction": t["direction"],
             "entry": t["entry_price"],
             "sl": None,
