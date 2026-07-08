@@ -9,6 +9,7 @@ from app.strategies.bollinger_reversion import BollingerReversion
 from app.strategies.donchian_breakout import DonchianBreakout
 from app.strategies.ema_pullback import EmaPullback
 from app.strategies.ema_pullback_scalp import EmaPullbackScalp
+from app.strategies.gold_m5_pullback import GoldM5Pullback
 from app.strategies.macd_cross import MacdCross
 from app.strategies.rsi_reversion import RsiReversion
 from app.strategies.sma_crossover import SmaCrossover
@@ -21,11 +22,20 @@ _REGISTRY: dict[str, type[Strategy]] = {
     "macd_cross": MacdCross,
     "rsi_reversion": RsiReversion,
     "bollinger_reversion": BollingerReversion,
+    "gold_m5_pullback": GoldM5Pullback,
 }
 
 
 def list_strategies() -> list[str]:
     return list(_REGISTRY)
+
+
+def strategy_scan_timeframe(name: str) -> str | None:
+    """A strategy's own scan timeframe (e.g. 'M5') if it declares one, else None
+    — lets the scanner run this strategy on a different timeframe than the
+    global one (class attribute, read without instantiating)."""
+    cls = _REGISTRY.get(name)
+    return getattr(cls, "scan_timeframe", None) if cls else None
 
 
 def build_strategy(name: str, params: dict | None = None) -> Strategy:

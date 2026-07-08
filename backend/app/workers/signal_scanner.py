@@ -47,25 +47,39 @@ class SignalScanner:
                 log.warning("Scan failed for %s: %s", asset, exc)
 
     def _scan_asset(self, asset: str, s) -> None:
-        df = mt5_client.fetch_ohlcv(asset, s.timeframe, 500)
-        if df is None or len(df) < 3:
-            return
-        df = df.iloc[:-1]  # drop the still-forming bar → evaluate the last CLOSED bar
-        bar_time = str(df.index[-1])
+        from app.strategies.registry import strategy_scan_timeframe
+
         daily_loss = self._daily_loss_pct()
 
         # Per-asset strategy list when configured (backtest-driven selection),
         # else the global deployed list — see scanner_store.ScannerSettings.
         asset_strategies = (getattr(s, "strategies_by_asset", None) or {}).get(asset) or s.strategies
 
-        # Run every deployed strategy on this asset's latest closed bar.
+        # Bars are fetched per TIMEFRAME and cached — most strategies use the
+        # global s.timeframe, but a strategy may declare its own (e.g. the M5
+        # gold scalp), so we honour that without refetching for each strategy.
+        df_cache: dict[str, object] = {}
+
+        def bars(tf: str):
+            if tf not in df_cache:
+                d = mt5_client.fetch_ohlcv(asset, tf, 500)
+                df_cache[tf] = d.iloc[:-1] if (d is not None and len(d) >= 3) else None
+            return df_cache[tf]
+
+        # Run every deployed strategy on this asset's latest closed bar (at the
+        # strategy's own timeframe when it declares one).
         for strat in asset_strategies:
-            key = f"{asset}:{s.timeframe}:{strat}"
+            tf = strategy_scan_timeframe(strat) or s.timeframe
+            df = bars(tf)
+            if df is None or len(df) < 3:
+                continue
+            bar_time = str(df.index[-1])
+            key = f"{asset}:{tf}:{strat}"
             if self._last_bar.get(key) == bar_time:
                 continue  # this strategy already processed this bar
             self._last_bar[key] = bar_time
 
-            ctx = TradeContext(asset=asset, timeframe=s.timeframe, market_data=df)
+            ctx = TradeContext(asset=asset, timeframe=tf, market_data=df)
             pipeline = build_pipeline(
                 strategy_name=strat,
                 wiki_enabled=s.wiki_enabled,

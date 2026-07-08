@@ -23,6 +23,11 @@ from app.services.settings_store import money_settings
 
 log = get_logger("services.trailing")
 
+# Strategies that manage their own FIXED exit and must NOT be trailed. Gold's
+# frequent pullbacks trigger a trailing stop before the fixed target, which
+# testing showed cuts the edge ~6x (fixed 1.8xATR netted 6x a ratchet/trail).
+NO_TRAIL_STRATEGIES = {"Gold M5 Pullback"}
+
 
 def _desired_stop(ctx: TradeContext, best: float, cfg) -> tuple[float | None, str | None]:
     """Compute the stop the trail wants given the best price so far, or (None, None)
@@ -55,6 +60,8 @@ def update_trade(ctx: TradeContext) -> bool:
     cfg = money_settings.get()
     if not cfg.trailing_enabled or ctx.signal is None or ctx.ticket is None:
         return False
+    if getattr(ctx, "strategy", None) in NO_TRAIL_STRATEGIES:
+        return False  # fixed-target strategy — trailing would clip its edge
 
     sig = ctx.signal
     spec = mt5_client.symbol_spec(sig.asset)
