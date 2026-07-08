@@ -251,6 +251,9 @@ def _monthly_markdown(month: str, rows: list[dict], overall: dict) -> str:
         f"generated: {datetime.now().isoformat(timespec='seconds')}\n"
         f"trades: {overall['trades']}\nwins: {overall.get('wins', 0)}\nlosses: {overall.get('losses', 0)}\n"
         f"win_rate: {overall.get('win_rate_pct', 0)}\nnet_pnl: {overall.get('net_pnl', 0)}\n"
+        # net_usd: unified cross-app money field (IntelliTrade trades Vantage in USD,
+        # so net_pnl already IS USD). Lets the vault dashboard compare all apps.
+        f"net_usd: {overall.get('net_pnl', 0)}\n"
         f"profit_factor: {overall.get('profit_factor')}\nmax_drawdown: {overall.get('max_drawdown', 0)}\n"
         f"tags:{tags}\n---\n\n"
     )
