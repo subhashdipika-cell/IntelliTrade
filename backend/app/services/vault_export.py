@@ -154,8 +154,14 @@ def snapshot_backtests(timeframe: str = "H1", count: int = 2000,
             if "error" in c:
                 lines.append(f"| {st} | — | — | — | — | (no data) |")
             else:
+                # PF is None when a strategy takes no losing trades (or no trades
+                # at all, e.g. the gold-only Gold M5 Pullback on BTC/ETH). Render
+                # it as "—" to match the frontend and the "no data" row above,
+                # instead of leaking the literal text "None" into the vault.
+                pf = c["profit_factor"]
+                pf_disp = "—" if pf is None else pf
                 lines.append(f"| {st} | {c['return_pct']} | {c['win_rate_pct']} | "
-                             f"{c['profit_factor']} | {c['max_dd_pct']} | {c['trades']} |")
+                             f"{pf_disp} | {c['max_dd_pct']} | {c['trades']} |")
         lines.append("")
     lines.append("```json")
     lines.append(json.dumps(payload, indent=2, default=str))
