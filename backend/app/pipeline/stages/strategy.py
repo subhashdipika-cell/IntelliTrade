@@ -32,7 +32,21 @@ class StrategyStage(Stage):
             f"{self.strategy.name}: {signal.direction.value} @ {signal.entry:g}",
         ))
         self._cap_target_to_structure(ctx)
+        self._human_touch(ctx)
         return ctx
+
+    def _human_touch(self, ctx: TradeContext) -> None:
+        """Context awareness (level map): freshness / location / R:R-to-structure
+        gates + a richer target cap (PDH + round numbers, not just swings).
+        Shadow-configurable via backend/level_config.json — see level_engine."""
+        if ctx.signal is None or ctx.blocked or ctx.market_data is None:
+            return
+        try:
+            from app.services.level_engine import apply_human_touch
+            apply_human_touch(ctx, self.name)
+        except Exception as e:   # a level-map failure must never kill the pipeline
+            ctx.record(Decision(self.name, Verdict.INFO,
+                                f"Level check failed (signal passed through): {e}"))
 
     def _cap_target_to_structure(self, ctx: TradeContext) -> None:
         """Pull the target inside the nearest resistance/support so we don't aim
