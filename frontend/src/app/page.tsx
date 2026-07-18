@@ -14,11 +14,24 @@ export default function Dashboard() {
   const [health, setHealth] = useState<string>("checking…");
   const [now, setNow] = useState<string>("");
 
+  // Poll health instead of a one-shot check on mount: the frontend boots
+  // faster than the Python backend, so a single check on load caught it before
+  // it was ready and stuck on OFFLINE until a manual refresh. Polling auto-
+  // flips to ONLINE within a few seconds of the backend coming up (and back to
+  // OFFLINE if it later drops).
   useEffect(() => {
-    api
-      .health()
-      .then(() => setHealth("ONLINE"))
-      .catch(() => setHealth("OFFLINE (start backend on :8100)"));
+    let alive = true;
+    const check = () =>
+      api
+        .health()
+        .then(() => alive && setHealth("ONLINE"))
+        .catch(() => alive && setHealth("OFFLINE (start backend on :8100)"));
+    check();
+    const t = setInterval(check, 3000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
   }, []);
 
   useEffect(() => {
