@@ -33,7 +33,11 @@ class MoneySettings:
     base_lots: float = 0.10
     risk_per_trade_pct: float = 1.0
     max_daily_loss_pct: float = 2.0
-    rr_ratio: str = "1:2"
+    # Reward multiple for LIVE signals (pipeline injects it into the strategy;
+    # see factory.parse_rr_ratio). Raised 1:2 -> 1:2.5 on 2026-07-19: the
+    # 64-trade pipeline review showed a 25% win rate, which needs ~3:1 to break
+    # even while the book was achieving 1.75.
+    rr_ratio: str = "1:2.5"
     max_open_trades: int = 3
     hard_stop_override: bool = False
 
@@ -41,13 +45,30 @@ class MoneySettings:
     # Triggers are % of the distance from entry to target (RR-agnostic, so they
     # still arm even when a trade's RR < 1). Trail distances are in units of the
     # initial risk R = |entry - initial_SL|, so we never need to refetch ATR.
+    # Rebalanced 2026-07-19 from the 64-trade pipeline review: target exits
+    # averaged +84.26 while TRAILED exits averaged only +16.10 across the same
+    # number of trades (17 each). The trail was converting would-be big winners
+    # into scratches — fatal for a 25%-win-rate book whose entire edge lives in
+    # the right tail. Breakeven armed at 50% of the way to TP (just +0.75R at
+    # RR 1.5), so any wobble after a small run flattened the trade.
+    # Fix: let trades breathe longer before protecting, and give the runner more
+    # room once it does trail. Stage 3 (near-target) stays tight — that one is
+    # protecting a nearly-complete winner, which is the right place to be strict.
+    # Triggers are % of the distance to TP, so raising rr_ratio ALREADY delays
+    # them in R terms (50% of TP was +0.75R at RR 1.5; it is +1.25R at RR 2.5).
+    # These moves are therefore deliberately modest on top of that — the aim is
+    # to stop scratching runners, not to leave a +2R trade unprotected:
+    #   breakeven  60% -> +1.50R   (was +0.75R effective)
+    #   trail      75% -> +1.88R, giving back 1.00R (was 0.70R) so noise can't
+    #                     tap the stop while the move is still developing
+    #   near-target stays strict at 90% — protecting an almost-complete winner.
     trailing_enabled: bool = True
-    be_trigger_pct: float = 50.0       # move SL → breakeven once price travels this far to TP
+    be_trigger_pct: float = 60.0       # move SL → breakeven once price travels this far to TP
     be_buffer_r: float = 0.10          # breakeven offset (× R) to cover spread + commission
-    trail_trigger_pct: float = 65.0    # beyond this, SL trails the best price
-    trail_r_mult: float = 0.70         # stage-2 give-back distance (× R)
-    near_target_pct: float = 80.0      # "near target" zone — tighten hard here
-    near_target_r_mult: float = 0.30   # stage-3 give-back distance (× R)
+    trail_trigger_pct: float = 75.0    # beyond this, SL trails the best price
+    trail_r_mult: float = 1.00         # stage-2 give-back distance (× R)
+    near_target_pct: float = 90.0      # "near target" zone — tighten hard here
+    near_target_r_mult: float = 0.40   # stage-3 give-back distance (× R)
 
     # ── Daily profit lock ────────────────────────────────────────────────────
     # Once today's realised P&L reaches the target, STOP opening new positions
