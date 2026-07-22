@@ -14,10 +14,21 @@ router = APIRouter(prefix="/history", tags=["history"])
 
 
 @router.get("/trades")
-def trades(limit: int = 100) -> dict:
+def trades(limit: int = 100, month: str | None = None) -> dict:
+    """Closed trades, newest first. `month` is YYYY-MM on closed_at.
+
+    The month filter used not to exist here while /summary and
+    /strategy-matrix both had one. FastAPI silently drops unknown query
+    params, so ?month=2026-07 looked like it worked and quietly returned the
+    last `limit` trades across ALL months — 96 rows for July, 30 of which had
+    closed in June. A filter that is ignored rather than rejected is worse
+    than no filter, because callers trust the result.
+    """
     rows = history_store.all()
+    if month:
+        rows = [r for r in rows if (r.get("closed_at") or "").startswith(month)]
     rows.sort(key=lambda r: r.get("closed_at") or "", reverse=True)
-    return {"count": len(rows), "trades": rows[:limit]}
+    return {"count": len(rows), "month": month, "trades": rows[:limit]}
 
 
 @router.get("/strategy-matrix")
