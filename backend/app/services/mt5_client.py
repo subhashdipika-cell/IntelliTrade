@@ -38,6 +38,48 @@ _TIMEFRAMES = {
 # Identifies IntelliTrade's orders in the terminal (lets you filter our trades).
 _MAGIC = 770011
 
+# ── MT5 server clock ─────────────────────────────────────────────────────────
+# MT5 returns position/deal times as epoch seconds expressed in the BROKER'S
+# server clock, not UTC. Vantage runs UTC+3, so feeding p.time straight into
+# datetime.fromtimestamp(..., tz=timezone.utc) stamps every MT5-sourced trade
+# three hours in the future. That is how three July 2026 trades ended up with
+# closed_at BEFORE opened_at: opened_at came from MT5 (inflated +3h) while
+# closed_at came from datetime.now(), so anything held under 3h inverted.
+#
+# The offset is MEASURED rather than assumed — brokers change it and DST
+# shifts it — by comparing a live tick's timestamp against the wall clock.
+# Cached for an hour; falls back to 0 (raw server time) if no symbol quotes,
+# which is no worse than the previous behaviour.
+_SRV_OFFSET: dict = {"at": 0.0, "sec": None}
+
+
+def _server_offset_sec() -> int:
+    """Seconds to SUBTRACT from an MT5 timestamp to get true UTC."""
+    import time as _t
+
+    if _SRV_OFFSET["sec"] is not None and _t.time() - _SRV_OFFSET["at"] < 3600:
+        return _SRV_OFFSET["sec"]
+    off = 0
+    try:
+        for sym in ("XAUUSD+", "BTCUSD", "EURUSD"):
+            if mt5.symbol_select(sym, True):
+                tick = mt5.symbol_info_tick(sym)
+                if tick and tick.time:
+                    off = int(round((tick.time - _t.time()) / 3600.0)) * 3600
+                    break
+    except Exception:
+        off = 0
+    _SRV_OFFSET.update(at=_t.time(), sec=off)
+    return off
+
+
+def mt5_ts_to_utc(ts) -> str:
+    """MT5 server-clock epoch -> true-UTC ISO string."""
+    from datetime import datetime, timezone
+
+    return datetime.fromtimestamp(int(ts) - _server_offset_sec(),
+                                  tz=timezone.utc).isoformat()
+
 
 def _deal_reason_str(code) -> str:
     """Map an MT5 deal reason to a simple tag. 'SL' = stop-loss hit (NOT trailed),
@@ -168,7 +210,7 @@ class MT5Client:
                 "sl": float(p.sl),
                 "tp": float(p.tp),
                 "lots": float(p.volume),
-                "opened_at": datetime.fromtimestamp(p.time, tz=timezone.utc).isoformat(),
+                "opened_at": mt5_ts_to_utc(p.time),
                 "strategy": strategy_from_comment(getattr(p, "comment", "")),
             })
         return out
@@ -238,8 +280,8 @@ class MT5Client:
                 "lots": float(entry.volume),
                 "pnl": round(pnl, 2),
                 "reason": _deal_reason_str(exit_.reason),
-                "opened_at": datetime.fromtimestamp(entry.time, tz=timezone.utc).isoformat(),
-                "closed_at": datetime.fromtimestamp(exit_.time, tz=timezone.utc).isoformat(),
+                "opened_at": mt5_ts_to_utc(entry.time),
+                "closed_at": mt5_ts_to_utc(exit_.time),
                 "strategy": strategy_from_comment(getattr(entry, "comment", "")),
             })
         return out
