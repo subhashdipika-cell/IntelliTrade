@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from app.strategies.base import Strategy
 from app.strategies.bollinger_reversion import BollingerReversion
+from app.strategies.break_retest import BreakRetest
 from app.strategies.donchian_breakout import DonchianBreakout
 from app.strategies.ema_pullback import EmaPullback
 from app.strategies.ema_pullback_scalp import EmaPullbackScalp
@@ -17,6 +18,7 @@ from app.strategies.sma_crossover import SmaCrossover
 _REGISTRY: dict[str, type[Strategy]] = {
     "sma_crossover": SmaCrossover,
     "donchian_breakout": DonchianBreakout,
+    "break_retest": BreakRetest,
     "ema_pullback": EmaPullback,
     "ema_pullback_scalp": EmaPullbackScalp,
     "macd_cross": MacdCross,
