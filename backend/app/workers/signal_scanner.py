@@ -29,6 +29,10 @@ log = get_logger("workers.scanner")
 
 
 class SignalScanner:
+    # How many closed bars BEFORE the newest one may be replayed after a scan
+    # gap (standby/sleep). Small on purpose: older setups are stale setups.
+    CATCHUP_BARS = 2
+
     def __init__(self) -> None:
         self._last_bar: dict[str, str] = {}
 
@@ -75,27 +79,57 @@ class SignalScanner:
                 continue
             bar_time = str(df.index[-1])
             key = f"{asset}:{tf}:{strat}"
-            if self._last_bar.get(key) == bar_time:
+            last_seen = self._last_bar.get(key)
+            if last_seen == bar_time:
                 continue  # this strategy already processed this bar
             self._last_bar[key] = bar_time
 
-            ctx = TradeContext(asset=asset, timeframe=tf, market_data=df)
-            pipeline = build_pipeline(
-                strategy_name=strat,
-                wiki_enabled=s.wiki_enabled,
-                daily_loss_pct=daily_loss,
-                include_execution=False,
-            )
-            ctx = pipeline.run(ctx)
-            if ctx.blocked or ctx.signal is None:
-                continue
+            # Missed-bar catch-up: bars that closed while the machine was in
+            # standby were previously skipped outright (the scanner jumped
+            # straight to the newest bar), so one-bar events like crossovers
+            # were lost forever — the 2026-07-21/22 standby cycling produced
+            # near-zero signals this way. Evaluate up to CATCHUP_BARS older
+            # missed bars too, oldest first. Cold start (last_seen None)
+            # keeps the old newest-bar-only behavior: replaying bars from
+            # before a restart risks re-entering trades already taken.
+            idxs = [len(df) - 1]
+            if last_seen is not None:
+                tail_start = max(len(df) - 1 - self.CATCHUP_BARS, 0)
+                idxs = [i for i in range(tail_start, len(df))
+                        if str(df.index[i]) > last_seen] or [len(df) - 1]
 
-            if s.mode == "autonomous":
-                self._maybe_execute(asset, ctx)
-            else:
-                telegram.send_setup_alert(ctx.signal, ctx.capital_deployed, ctx.total_capital)
-                log.info("ALERT-ONLY setup [%s]: %s %s @ %s",
-                         ctx.strategy, ctx.signal.direction.value, asset, ctx.signal.entry)
+            for i in idxs:
+                sub = df if i == len(df) - 1 else df.iloc[: i + 1]
+                ctx = TradeContext(asset=asset, timeframe=tf, market_data=sub)
+                pipeline = build_pipeline(
+                    strategy_name=strat,
+                    wiki_enabled=s.wiki_enabled,
+                    daily_loss_pct=daily_loss,
+                    include_execution=False,
+                )
+                ctx = pipeline.run(ctx)
+                if ctx.blocked or ctx.signal is None:
+                    continue
+
+                # A signal from an older missed bar is only worth acting on
+                # while price is still near it — beyond 0.75 ATR the move is
+                # gone; chasing it would skew every SL/TP the signal carries.
+                if i < len(df) - 1:
+                    atr = self._atr14(df)
+                    drift = abs(float(df["close"].iloc[-1]) - float(df["close"].iloc[i]))
+                    if atr and drift > 0.75 * atr:
+                        log.info("Catch-up signal stale [%s] bar=%s drift=%.2f ATR=%.2f — skipped.",
+                                 key, df.index[i], drift, atr)
+                        continue
+                    log.info("Catch-up signal [%s]: missed bar %s recovered.", key, df.index[i])
+
+                if s.mode == "autonomous":
+                    self._maybe_execute(asset, ctx)
+                else:
+                    telegram.send_setup_alert(ctx.signal, ctx.capital_deployed, ctx.total_capital)
+                    log.info("ALERT-ONLY setup [%s]: %s %s @ %s",
+                             ctx.strategy, ctx.signal.direction.value, asset, ctx.signal.entry)
+                break  # one action per strategy per scan — guardrails stay simple
 
     def _maybe_execute(self, asset: str, ctx: TradeContext) -> None:
         # Guardrail: one open position per asset.
@@ -108,6 +142,19 @@ class SignalScanner:
             log.info("Skip %s: max open trades (%d) reached.", asset, max_open)
             return
         ExecutionStage().process(ctx)  # places order, entry alert, registers w/ monitor
+
+    @staticmethod
+    def _atr14(df) -> float:
+        """ATR(14) of the last bar — drift guard for catch-up signals."""
+        try:
+            hl = df["high"] - df["low"]
+            hc = (df["high"] - df["close"].shift()).abs()
+            lc = (df["low"] - df["close"].shift()).abs()
+            import pandas as pd
+            tr = pd.concat([hl, hc, lc], axis=1).max(axis=1)
+            return float(tr.rolling(14).mean().iloc[-1])
+        except Exception:
+            return 0.0
 
     @staticmethod
     def _has_open_position(asset: str) -> bool:

@@ -46,11 +46,38 @@ def _weekly_ml_retrain() -> None:
         log.warning("Weekly ML retrain failed: %s", exc)
 
 
+def _keep_awake() -> None:
+    """Hold the machine out of Modern Standby while the scanner runs.
+
+    The 2026-07-21/22 outages: the on-battery sleep timer suspended the fleet
+    repeatedly, so closed bars (and their one-bar cross events) went unseen.
+    Same pattern as the AlphaEdge strategy-lab. ES_SYSTEM_REQUIRED keeps the
+    system awake; the display may still sleep. Process-scoped — released when
+    the backend exits.
+    """
+    try:
+        import ctypes
+        ES_CONTINUOUS, ES_SYSTEM_REQUIRED = 0x80000000, 0x00000001
+        ctypes.windll.kernel32.SetThreadExecutionState(
+            ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
+    except Exception as exc:  # noqa: BLE001 — never block the scheduler
+        log.warning("Keep-awake failed: %s", exc)
+
+
 def start_scheduler() -> None:
     global _scheduler
     if _scheduler is not None:
         return
     _scheduler = BackgroundScheduler(daemon=True)
+    _scheduler.add_job(
+        _keep_awake,
+        trigger="interval",
+        seconds=60,  # re-assert every minute from the same worker thread pool
+        id="keep_awake",
+        max_instances=1,
+        coalesce=True,
+    )
+    _keep_awake()
     _scheduler.add_job(
         trade_monitor.poll,
         trigger="interval",
