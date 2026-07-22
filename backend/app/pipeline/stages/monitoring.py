@@ -100,6 +100,10 @@ def reattach_open_trades() -> int:
         # Recover the strategy from the MT5 order comment ("IT <name>") so a
         # restart no longer erases attribution in History.
         ctx.strategy = p.get("strategy")
+        # This process did not open the position — it inherited it. Mark the
+        # origin so History can separate the bot's own decisions from positions
+        # it merely adopted; conflating them flatters the scanner's record.
+        ctx.origin = "adopted"
         ctx.record(Decision("reattach", Verdict.INFO,
                             "Re-attached open position to monitor after restart.",
                             at=p["opened_at"]))
@@ -130,6 +134,9 @@ def reconcile_from_mt5(days: int = 7) -> int:
             "ticket": pid,
             "asset": rev.get(t["symbol"], t["symbol"]),
             "strategy": t.get("strategy"),         # from the "IT <name>" MT5 comment (None for pre-stamping trades)
+            # Backfilled from MT5 deal history, so this process never saw the
+            # decision to open it. Same reasoning as the "adopted" origin.
+            "origin": "reconciled",
             "direction": t["direction"],
             "entry": t["entry_price"],
             "sl": None,

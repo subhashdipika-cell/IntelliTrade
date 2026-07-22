@@ -63,6 +63,7 @@ def build_record(ctx: TradeContext, pnl: float, close_price: float) -> dict:
         "ticket": ctx.ticket,
         "asset": ctx.asset,
         "strategy": ctx.strategy,
+        "origin": ctx.origin,        # "scanner" | "adopted" — see TradeContext
         "direction": sig.direction.value if sig else None,
         "entry": sig.entry if sig else None,
         "sl": sig.stop_loss if sig else None,

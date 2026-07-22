@@ -63,6 +63,16 @@ class TradeContext:
     asset: str
     timeframe: str = "H1"
     strategy: str | None = None       # name of the strategy that produced the signal
+    # Where this trade came FROM, as opposed to what strategy it ran.
+    #   "scanner"  — originated by the pipeline in this process (the bot's own work)
+    #   "adopted"  — found already open in MT5 under our magic and re-attached
+    #                after a restart; this process did not decide to open it
+    # Without this split, adopted positions are indistinguishable from scanner
+    # trades in History. In July 2026 that hid the real picture: 12 adopted
+    # trades made +376 while the scanner's own 54 lost -570, so the reported
+    # -193 looked like mild underperformance instead of a bot losing ~29% of
+    # capital in a month.
+    origin: str = "scanner"
     market_data: Any = None          # pandas DataFrame of OHLCV
     signal: Signal | None = None
     decisions: list[Decision] = field(default_factory=list)

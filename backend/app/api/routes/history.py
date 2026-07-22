@@ -151,6 +151,30 @@ def monthly_report(month: str | None = None) -> dict:
     }
 
 
+def trade_origin(r: dict) -> str:
+    """Where a trade came from: "scanner" (the bot decided to open it) vs
+    "adopted"/"reconciled" (it was already open in MT5, or backfilled from deal
+    history, and this process only inherited it).
+
+    Records written before the `origin` field existed are inferred: a reattach
+    stage in the decision tree, or a mt5_reconcile source, means the trade was
+    not originated by the scanner. Without this, adopted positions are counted
+    as bot performance — in July 2026, 12 adopted trades worth +376 masked the
+    scanner's own -570 and made a -29%-of-capital month read as -193.
+    """
+    o = r.get("origin")
+    if o:
+        return o
+    if r.get("source") == "mt5_reconcile":
+        return "reconciled"
+    tree = r.get("decision_tree") or []
+    if isinstance(tree, list) and any(
+        isinstance(s, dict) and s.get("stage") == "reattach" for s in tree
+    ):
+        return "adopted"
+    return "scanner"
+
+
 @router.get("/summary")
 def summary(month: str | None = None) -> dict:
     """Aggregate closed trades for a month (YYYY-MM; defaults to current)."""
@@ -176,6 +200,22 @@ def summary(month: str | None = None) -> dict:
         a["win_rate_pct"] = round(a["wins"] / a["count"] * 100, 2)
 
     ending = next((r.get("final_capital") for r in rows if r.get("final_capital") is not None), None)
+
+    # Split by origin. The headline total mixes the bot's own trades with
+    # positions it merely inherited, which flatters or damns the scanner for
+    # decisions it never made. `scanner` is the number to judge the bot on.
+    by_origin: dict[str, dict] = {}
+    for r in rows:
+        o = by_origin.setdefault(trade_origin(r), {"count": 0, "pnl": 0.0, "wins": 0})
+        o["count"] += 1
+        o["pnl"] += r.get("pnl", 0.0)
+        if r.get("pnl", 0.0) > 0:
+            o["wins"] += 1
+    for o in by_origin.values():
+        o["pnl"] = round(o["pnl"], 2)
+        o["win_rate_pct"] = round(o["wins"] / o["count"] * 100, 2)
+
+    scanner = [r for r in rows if trade_origin(r) == "scanner"]
     return {
         "month": month,
         "trades": len(rows),
@@ -183,6 +223,10 @@ def summary(month: str | None = None) -> dict:
         "win_rate_pct": round(len(wins) / len(rows) * 100, 2),
         "by_outcome": dict(by_outcome),
         "by_asset": by_asset,
+        "by_origin": by_origin,
+        # What the bot itself actually did, excluding inherited positions.
+        "scanner_trades": len(scanner),
+        "scanner_pnl": round(sum(r.get("pnl", 0.0) for r in scanner), 2),
         "ending_capital": ending,
     }
 
