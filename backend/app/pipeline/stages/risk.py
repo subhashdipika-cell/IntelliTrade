@@ -17,7 +17,7 @@ from app.services.mt5_client import mt5_client
 class RiskConfig:
     base_lots: float = 0.10              # fallback for assets not in lots_by_asset
     lots_by_asset: dict[str, float] = field(default_factory=dict)
-    risk_per_trade_pct: float = 1.0
+    risk_per_trade_pct: float = 0.5
     max_daily_loss_pct: float = 2.0
     hard_stop_override: bool = False
     profit_lock_enabled: bool = True
@@ -92,15 +92,46 @@ class RiskStage(Stage):
 
         acct = mt5_client.account_info()
         total_capital = acct["equity"] if acct else None
+        if not total_capital or total_capital <= 0:
+            ctx.record(Decision(self.name, Verdict.BLOCK,
+                                "Cannot size safely: MT5 equity is unavailable."))
+            return ctx
         ctx.total_capital = total_capital
 
-        lots = self.cfg.lots_for(ctx.signal.asset)
+        risk_money = total_capital * self.cfg.risk_per_trade_pct / 100.0
+        sized = mt5_client.volume_for_risk(
+            ctx.signal.asset, ctx.signal.entry, ctx.signal.stop_loss, risk_money,
+        )
+        if sized is None:
+            ctx.record(Decision(
+                self.name, Verdict.BLOCK,
+                f"Cannot fit {self.cfg.risk_per_trade_pct:g}% risk into broker volume "
+                "constraints for this stop; trade skipped.",
+            ))
+            return ctx
+
+        # Existing per-asset lot settings become a conservative maximum cap,
+        # never a fixed size. This preserves the user's safety ceiling while
+        # making actual risk follow the stop distance.
+        cap = self.lots_for(ctx.signal.asset)
+        lots = min(sized["lots"], cap) if cap > 0 else sized["lots"]
+        if lots <= 0:
+            ctx.record(Decision(self.name, Verdict.BLOCK, "Calculated volume is zero."))
+            return ctx
         ctx.signal.lots = lots
-        ctx.capital_deployed = self._estimate_capital(ctx.signal.entry, lots)
+        margin = mt5_client.calc_margin(
+            ctx.signal.asset, ctx.signal.direction.value, lots, ctx.signal.entry,
+        )
+        ctx.capital_deployed = round(
+            margin if margin is not None else self._estimate_capital(ctx.signal.entry, lots),
+            2,
+        )
+        realized_risk = sized["risk_per_lot"] * lots
 
         ctx.record(Decision(self.name, Verdict.PASS,
                             f"Sized {lots:g} lots for {ctx.signal.asset} "
-                            f"(~deployed {ctx.capital_deployed:.2f})."))
+                            f"({realized_risk:.2f} risk budget {risk_money:.2f}; "
+                            f"~margin {ctx.capital_deployed:.2f})."))
         return ctx
 
     def _estimate_capital(self, entry: float, lots: float) -> float:

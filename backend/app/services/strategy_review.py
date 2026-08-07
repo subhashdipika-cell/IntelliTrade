@@ -87,6 +87,30 @@ def _build_messages(per: dict, unattributed: int) -> list[dict]:
             {"role": "user", "content": user}]
 
 
+def _deterministic_suggestions(per: dict) -> tuple[str, list[dict]]:
+    """Useful fallback when an LLM endpoint is unavailable or too slow."""
+    if not per:
+        return "No attributed strategy history is available yet.", []
+    ranked = sorted(per.items(), key=lambda item: item[1].get("net_pnl", 0.0))
+    worst_name, worst = ranked[0]
+    suggestions = [{
+        "strategy": worst_name, "asset": "ALL",
+        "observation": f"{worst.get('trades', 0)} trades, PF {worst.get('profit_factor')}, net {worst.get('net_pnl'):+.2f}.",
+        "action": "Keep disabled or alert-only until a fresh walk-forward test is profitable.",
+        "confidence": "medium" if worst.get("trades", 0) >= 10 else "low",
+    }]
+    for name, stats in ranked:
+        for asset, asset_stats in (stats.get("by_asset") or {}).items():
+            if asset_stats.get("trades", 0) >= 5 and (asset_stats.get("profit_factor") or 0) < 0.8:
+                suggestions.append({
+                    "strategy": name, "asset": asset,
+                    "observation": f"{asset_stats['trades']} trades, PF {asset_stats.get('profit_factor')}, net {asset_stats.get('net_pnl'):+.2f}.",
+                    "action": "Remove this strategy-asset pair from autonomous execution.",
+                    "confidence": "medium",
+                })
+    return f"Weakest attributed strategy is {worst_name}; deterministic safeguards are shown below.", suggestions[:6]
+
+
 def review() -> dict:
     """Run a full review. Always returns a dict (never raises); on any LLM/infra
     problem it returns the stats with an explanatory note and empty suggestions."""
@@ -113,14 +137,26 @@ def review() -> dict:
                        "or add an OpenRouter key, then restart.")
         return out
 
-    try:
-        content = llm.chat(
-            _build_messages(per, unattributed), max_tokens=500,
-            provider=(settings.review_provider or None),
-            models_override=[settings.review_model] if settings.review_model else None,
-        )
-    except Exception as exc:  # noqa: BLE001
-        out["note"] = f"LLM call failed: {exc}"
+    messages = _build_messages(per, unattributed)
+    attempts = []
+    primary_provider = settings.review_provider or settings.llm_provider
+    primary_models = [settings.review_model] if settings.review_model else None
+    attempts.append((primary_provider, primary_models))
+    if primary_provider.lower() != settings.llm_provider.lower():
+        attempts.append((settings.llm_provider, None))
+    content = None
+    failures = []
+    for provider, models_override in attempts:
+        try:
+            content = llm.chat(messages, max_tokens=160, timeout=8,
+                               provider=provider, models_override=models_override)
+            out["provider_used"] = provider
+            break
+        except Exception as exc:  # noqa: BLE001 — try the next configured endpoint
+            failures.append(f"{provider}: {exc}")
+    if content is None:
+        out["summary"], out["suggestions"] = _deterministic_suggestions(per)
+        out["note"] = "LLM unavailable; deterministic review returned. " + " | ".join(failures)
         return out
 
     data = llm.extract_json(content)

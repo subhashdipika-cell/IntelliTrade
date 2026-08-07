@@ -31,14 +31,14 @@ class MoneySettings:
     # Per-asset lot sizes; `base_lots` is the fallback for any asset not listed.
     lots_by_asset: dict[str, float] = field(default_factory=_default_lots)
     base_lots: float = 0.10
-    risk_per_trade_pct: float = 1.0
+    risk_per_trade_pct: float = 0.5
     max_daily_loss_pct: float = 2.0
     # Reward multiple for LIVE signals (pipeline injects it into the strategy;
     # see factory.parse_rr_ratio). Raised 1:2 -> 1:2.5 on 2026-07-19: the
     # 64-trade pipeline review showed a 25% win rate, which needs ~3:1 to break
     # even while the book was achieving 1.75.
     rr_ratio: str = "1:2.5"
-    max_open_trades: int = 3
+    max_open_trades: int = 2
     hard_stop_override: bool = False
 
     # ── Trailing stop (profit protection) ────────────────────────────────────
@@ -84,7 +84,7 @@ class MoneySettings:
     # support (shorts) so we don't aim past a level price is unlikely to break.
     target_cap_enabled: bool = True
     resistance_lookback: int = 20      # bars scanned for the swing level
-    min_rr_after_cap: float = 1.2      # RR floor after capping
+    min_rr_after_cap: float = 1.8      # RR floor after capping
     skip_low_rr: bool = False          # if True, BLOCK signals whose capped RR < floor
 
 

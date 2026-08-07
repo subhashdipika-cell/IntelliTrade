@@ -8,12 +8,15 @@ from app.strategies.base import Strategy
 from app.strategies.bollinger_reversion import BollingerReversion
 from app.strategies.break_retest import BreakRetest
 from app.strategies.donchian_breakout import DonchianBreakout
+from app.strategies.eighty_twenty import EightyTwenty
 from app.strategies.ema_pullback import EmaPullback
 from app.strategies.ema_pullback_scalp import EmaPullbackScalp
 from app.strategies.gold_m5_pullback import GoldM5Pullback
 from app.strategies.macd_cross import MacdCross
+from app.strategies.momentum_pinball import MomentumPinball
 from app.strategies.rsi_reversion import RsiReversion
 from app.strategies.sma_crossover import SmaCrossover
+from app.strategies.turtle_soup import TurtleSoup
 
 _REGISTRY: dict[str, type[Strategy]] = {
     "sma_crossover": SmaCrossover,
@@ -25,6 +28,12 @@ _REGISTRY: dict[str, type[Strategy]] = {
     "rsi_reversion": RsiReversion,
     "bollinger_reversion": BollingerReversion,
     "gold_m5_pullback": GoldM5Pullback,
+    # Street Smarts (Connors & Raschke) swing patterns — H4 by default.
+    # Registered = selectable for backtest/live; deploying them live still
+    # requires adding them to the scanner's per-asset strategy settings.
+    "turtle_soup": TurtleSoup,
+    "eighty_twenty": EightyTwenty,
+    "momentum_pinball": MomentumPinball,
 }
 
 

@@ -59,6 +59,7 @@ def build_record(ctx: TradeContext, pnl: float, close_price: float) -> dict:
     """Construct a history record from a closed TradeContext."""
     sig = ctx.signal
     decisions = ctx.explain()
+    learning_features = _entry_features(ctx)
     return {
         "ticket": ctx.ticket,
         "asset": ctx.asset,
@@ -78,7 +79,28 @@ def build_record(ctx: TradeContext, pnl: float, close_price: float) -> dict:
         "opened_at": decisions[0]["at"] if decisions else None,
         "closed_at": datetime.now(timezone.utc).isoformat(),
         "decision_tree": decisions,
+        "learning_features": learning_features,
+        "feature_version": 2 if learning_features else None,
     }
+
+
+def _entry_features(ctx: TradeContext) -> dict[str, float] | None:
+    """Capture the exact feature vector used at entry for future outcome learning."""
+    if ctx.signal is None or ctx.market_data is None or len(ctx.market_data) == 0:
+        return None
+    try:
+        from app.ai_engine.features import context_features, generate_features
+        row = generate_features(ctx.market_data).iloc[-1]
+        risk = abs(ctx.signal.entry - ctx.signal.stop_loss)
+        rr = abs(ctx.signal.target - ctx.signal.entry) / risk if risk else 0.0
+        out = {k: float(row[k]) for k in ("returns", "rsi", "macd_norm", "atr_pct", "mom_10")}
+        out.update(context_features(ctx.signal.direction.value, rr, ctx.strategy, ctx.timeframe))
+        if not all(value == value and abs(value) != float("inf") for value in out.values()):
+            return None
+        return out
+    except Exception as exc:  # feature capture must never break trade persistence
+        log.warning("Entry feature capture failed for ticket %s: %s", ctx.ticket, exc)
+        return None
 
 
 history_store = HistoryStore()

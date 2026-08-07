@@ -56,8 +56,10 @@ class Settings(BaseSettings):
     # too slow on a local CPU model, so it defaults to OpenRouter even when the
     # gatekeeper runs on local Ollama. (Leave review_provider blank to follow the
     # global provider.)
-    review_provider: str = "openrouter"
-    review_model: str = "openai/gpt-4o-mini"
+    # Blank means Review follows the global provider/model. This avoids sending
+    # a local-only installation to a blocked cloud socket by default.
+    review_provider: str = ""
+    review_model: str = ""
 
     # App
     base_currency: str = "USD"

@@ -11,6 +11,7 @@ the app and the backtester still work.
 """
 from __future__ import annotations
 
+import math
 import os
 
 import pandas as pd
@@ -308,8 +309,55 @@ class MT5Client:
             "stops_level": info.trade_stops_level,
             "spread": info.spread,
             "volume_min": info.volume_min,
+            "volume_max": info.volume_max,
+            "volume_step": info.volume_step,
+            "trade_tick_value": info.trade_tick_value,
+            "trade_tick_size": info.trade_tick_size,
             "ask": tick.ask,
             "bid": tick.bid,
+        }
+
+    def volume_for_risk(self, asset: str, entry: float, stop_loss: float,
+                        risk_money: float) -> dict | None:
+        """Return a broker-valid volume sized from the stop distance.
+
+        The result is rounded DOWN to the broker's volume step. If the broker's
+        minimum volume would exceed the requested risk, the trade is rejected by
+        returning ``None`` rather than silently taking too much risk.
+        """
+        spec = self.symbol_spec(asset)
+        if spec is None or risk_money <= 0 or entry == stop_loss:
+            return None
+        tick_size = float(spec.get("trade_tick_size") or 0.0)
+        tick_value = float(spec.get("trade_tick_value") or 0.0)
+        step = float(spec.get("volume_step") or 0.0)
+        minimum = float(spec.get("volume_min") or 0.0)
+        maximum = float(spec.get("volume_max") or 0.0)
+        if tick_size <= 0 or tick_value <= 0 or step <= 0 or minimum <= 0:
+            log.warning("Incomplete MT5 risk specs for %s: %s", asset, spec)
+            return None
+
+        risk_per_lot = abs(float(entry) - float(stop_loss)) / tick_size * tick_value
+        raw_lots = float(risk_money) / risk_per_lot
+        if raw_lots < minimum:
+            log.warning("Skipping %s: minimum %.4f lots risks %.2f > budget %.2f.",
+                        asset, minimum, risk_per_lot * minimum, risk_money)
+            return None
+
+        lots = math.floor(raw_lots / step + 1e-9) * step
+        if maximum > 0:
+            lots = min(lots, maximum)
+        lots = round(lots, max(0, int(round(-math.log10(step)))))
+        if lots < minimum:
+            return None
+        return {
+            "lots": lots,
+            "risk_per_lot": risk_per_lot,
+            "risk_money": risk_per_lot * lots,
+            "raw_lots": raw_lots,
+            "volume_min": minimum,
+            "volume_max": maximum,
+            "volume_step": step,
         }
 
     def calc_margin(self, asset: str, direction: str, lots: float, price: float) -> float | None:

@@ -1,9 +1,4 @@
-"""AI meta-labeling filter.
-
-Deliberately ADVISORY by default: it scores the signal and records an INFO
-decision, but does NOT block until you have enough live trade history for the
-model to be trustworthy. Flip `blocking=True` and set `min_confidence` only once
-the model is validated. The edge must come from strategy + risk, not this."""
+"""Governed AI meta-labeling filter."""
 from __future__ import annotations
 
 from app.pipeline.base import Stage
@@ -22,7 +17,14 @@ class AIFilterStage(Stage):
         if ctx.signal is None:
             ctx.record(Decision(self.name, Verdict.SKIP, "No signal to score."))
             return ctx
+        from app.ai_engine.model_trainer import model_metadata
         confidence = self._score(ctx)
+        if not model_metadata(ctx.asset).get("active"):
+            ctx.record(Decision(self.name,
+                                Verdict.INFO,
+                                f"Advisory confidence {confidence:.0%}; no validated outcome model.",
+                                score=confidence))
+            return ctx
         if not self.blocking:
             ctx.record(Decision(self.name, Verdict.INFO,
                                 f"Advisory confidence {confidence:.0%}.",
@@ -42,4 +44,7 @@ class AIFilterStage(Stage):
         if ctx.market_data is None or len(ctx.market_data) == 0:
             return 1.0
         direction = ctx.signal.direction.value if ctx.signal else "BUY"
-        return predict_win_probability(ctx.asset, ctx.market_data, direction)
+        return predict_win_probability(ctx.asset, ctx.market_data, direction,
+                                       ctx.strategy, ctx.timeframe,
+                                       ctx.signal.entry, ctx.signal.stop_loss,
+                                       ctx.signal.target)

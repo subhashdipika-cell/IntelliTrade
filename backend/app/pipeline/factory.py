@@ -40,7 +40,7 @@ def build_pipeline(
     strategy_name: str = "sma_crossover",
     wiki_enabled: bool = True,
     wiki_blocking: bool = False,
-    ai_blocking: bool = False,
+    ai_blocking: bool = True,
     risk_config: RiskConfig | None = None,
     daily_loss_pct: float = 0.0,
     include_execution: bool = True,

@@ -5,7 +5,22 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-FEATURE_COLS = ["returns", "rsi", "macd_norm", "atr_pct", "mom_10"]
+MARKET_FEATURE_COLS = ["returns", "rsi", "macd_norm", "atr_pct", "mom_10"]
+CONTEXT_FEATURE_COLS = ["direction_buy", "planned_rr", "strategy_bucket", "timeframe_code"]
+FEATURE_COLS = MARKET_FEATURE_COLS + CONTEXT_FEATURE_COLS
+
+
+def context_features(direction: str = "BUY", planned_rr: float = 0.0,
+                     strategy: str | None = None, timeframe: str = "H1") -> dict[str, float]:
+    """Stable non-market features shared by training and live scoring."""
+    import hashlib
+    key = (strategy or "unknown").strip().lower().encode("utf-8")
+    bucket = int.from_bytes(hashlib.sha256(key).digest()[:2], "big") % 32
+    tf_code = {"M1": 1, "M5": 5, "M15": 15, "M30": 30,
+               "H1": 60, "H4": 240, "D1": 1440}.get(timeframe.upper(), 60)
+    return {"direction_buy": 1.0 if direction.upper() == "BUY" else 0.0,
+            "planned_rr": float(planned_rr or 0.0),
+            "strategy_bucket": float(bucket), "timeframe_code": float(tf_code)}
 
 
 def generate_features(df: pd.DataFrame) -> pd.DataFrame:
