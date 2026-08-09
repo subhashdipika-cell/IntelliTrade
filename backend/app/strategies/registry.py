@@ -18,6 +18,7 @@ from app.strategies.price_action_scalp import PriceActionScalp
 from app.strategies.gold_macd_trend import GoldMacdTrend
 from app.strategies.range_reversion_scalp import RangeReversionScalp
 from app.strategies.hybrid_gold_m1_scalp import HybridGoldM1Scalp
+from app.strategies.smc_confluence import SmcConfluence
 from app.strategies.rsi_reversion import RsiReversion
 from app.strategies.sma_crossover import SmaCrossover
 from app.strategies.turtle_soup import TurtleSoup
@@ -36,6 +37,7 @@ _REGISTRY: dict[str, type[Strategy]] = {
     "smt_gold_macd_trend": GoldMacdTrend,
     "range_reversion_scalp": RangeReversionScalp,
     "hybrid_gold_m1_scalp": HybridGoldM1Scalp,
+    "smc_confluence": SmcConfluence,
     # Street Smarts (Connors & Raschke) swing patterns — H4 by default.
     # Registered = selectable for backtest/live; deploying them live still
     # requires adding them to the scanner's per-asset strategy settings.
