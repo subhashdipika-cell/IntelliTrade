@@ -16,10 +16,10 @@ timeout /t 2 /nobreak >nul
 
 REM Backend (FastAPI + MT5 + monitor) on http://localhost:8100
 REM Port 8100 (not 8000) so it doesn't clash with Smart Money Trader's backend.
-start "IntelliTrade Backend" cmd /k "cd /d D:\IntelliTrade\backend && .venv\Scripts\python.exe -m uvicorn main:app --port 8100"
+start "IntelliTrade Backend" cmd /c "cd /d D:\IntelliTrade\backend && .venv\Scripts\python.exe -m uvicorn main:app --port 8100"
 
 REM Frontend (Next.js UI) on http://localhost:3000
-start "IntelliTrade Frontend" cmd /k "cd /d D:\IntelliTrade\frontend && npm run dev"
+start "IntelliTrade Frontend" cmd /c "cd /d D:\IntelliTrade\frontend && npm run dev"
 
 REM Give the servers a moment, then open the dashboard in your browser
 timeout /t 12 /nobreak >nul
@@ -31,4 +31,5 @@ echo   Backend  - http://localhost:8100
 echo   Frontend - http://localhost:3000
 echo.
 echo To STOP IntelliTrade, close those two windows.
-echo (You can close this window.)
+echo This launcher window will now close.
+exit
