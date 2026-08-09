@@ -42,6 +42,18 @@ has run live-on-Demo for several weeks.
 See `backend/app/services/telegram.py` and the wiring in
 `backend/app/pipeline/stages/execution.py` and `monitoring.py`.
 
+## Price-action scalp strategy
+
+`price_action_scalp` is available in Backtest and Live. It models a discretionary
+chart read as a causal **range break → retest → rejection candle** setup. It uses
+OHLC price action for the setup and ATR only to normalize stops and reject trades
+with excessive risk. It scans M5 bars and uses a default 1.8R target.
+
+Deploy it in `alert_only` mode first. In the Live page or `/api/scanner/settings`,
+select `price_action_scalp` for GOLD and/or BTC. Do not switch it to autonomous
+until it has passed walk-forward testing with the actual symbol contract,
+spread, commission, and several weeks of demo forward testing.
+
 ## Running (everyday)
 
 1. Open the **Vantage MT5 terminal** and log in to your **DEMO** account.
