@@ -318,12 +318,13 @@ class MT5Client:
         }
 
     def volume_for_risk(self, asset: str, entry: float, stop_loss: float,
-                        risk_money: float) -> dict | None:
+                        risk_money: float, min_risk_tolerance: float = 1.05) -> dict | None:
         """Return a broker-valid volume sized from the stop distance.
 
-        The result is rounded DOWN to the broker's volume step. If the broker's
-        minimum volume would exceed the requested risk, the trade is rejected by
-        returning ``None`` rather than silently taking too much risk.
+        The result is rounded DOWN to the broker's volume step. A broker minimum
+        lot may exceed the requested risk by a small rounding margin; that is
+        allowed up to ``min_risk_tolerance`` (default 5%). Materially oversized
+        minimum lots are still rejected.
         """
         spec = self.symbol_spec(asset)
         if spec is None or risk_money <= 0 or entry == stop_loss:
@@ -339,12 +340,17 @@ class MT5Client:
 
         risk_per_lot = abs(float(entry) - float(stop_loss)) / tick_size * tick_value
         raw_lots = float(risk_money) / risk_per_lot
-        if raw_lots < minimum:
+        minimum_risk = risk_per_lot * minimum
+        if raw_lots < minimum and minimum_risk > risk_money * max(1.0, min_risk_tolerance):
             log.warning("Skipping %s: minimum %.4f lots risks %.2f > budget %.2f.",
-                        asset, minimum, risk_per_lot * minimum, risk_money)
+                        asset, minimum, minimum_risk, risk_money)
             return None
 
-        lots = math.floor(raw_lots / step + 1e-9) * step
+        if raw_lots < minimum:
+            log.info("Allowing broker minimum %.4f lots for %s: risk %.2f is within %.1f%% tolerance of budget %.2f.",
+                     minimum, asset, minimum_risk, (max(1.0, min_risk_tolerance) - 1.0) * 100.0, risk_money)
+
+        lots = minimum if raw_lots < minimum else math.floor(raw_lots / step + 1e-9) * step
         if maximum > 0:
             lots = min(lots, maximum)
         lots = round(lots, max(0, int(round(-math.log10(step)))))

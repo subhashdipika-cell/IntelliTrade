@@ -113,7 +113,7 @@ class RiskStage(Stage):
         # Existing per-asset lot settings become a conservative maximum cap,
         # never a fixed size. This preserves the user's safety ceiling while
         # making actual risk follow the stop distance.
-        cap = self.lots_for(ctx.signal.asset)
+        cap = self.cfg.lots_for(ctx.signal.asset)
         lots = min(sized["lots"], cap) if cap > 0 else sized["lots"]
         if lots <= 0:
             ctx.record(Decision(self.name, Verdict.BLOCK, "Calculated volume is zero."))
