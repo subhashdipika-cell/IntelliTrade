@@ -65,6 +65,8 @@ class EnsembleResult:
     uncertainty: float = 1.0
     reason: str = ""
     models: dict[str, str] | None = None
+    active_models: list[str] | None = None
+    weights: dict[str, float] | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -156,44 +158,36 @@ class HFEnsemble:
         if df is None or len(df) < settings.ai_min_bars:
             return EnsembleResult(False, reason="insufficient closed bars")
 
-        direct, direct_uncertainty = self._direct_score(
+        direct, direct_uncertainty, has_direct = self._direct_score(
             asset, df, direction, strategy, timeframe, entry, stop_loss, target
         )
-        foundation, foundation_uncertainty = self._foundation_score(asset, df)
-        sentiment = self._sentiment_score(asset)
-        has_direct = self._loaded.get("direct") == "local outcome model"
-        has_foundation = self._loaded.get("chronos", "").startswith(settings.ai_foundation_model)
-        has_sentiment = bool(settings.ai_sentiment_cache and os.path.exists(settings.ai_sentiment_cache))
-        if not (has_direct or has_foundation or has_sentiment):
+        foundation, foundation_uncertainty, has_foundation = self._foundation_score(
+            asset, df, direction
+        )
+        sentiment, sentiment_uncertainty, has_sentiment = self._sentiment_score(
+            asset, direction
+        )
+        signals = {
+            "direct": (direct, direct_uncertainty, has_direct),
+            "foundation": (foundation, foundation_uncertainty, has_foundation),
+            "sentiment": (sentiment, sentiment_uncertainty, has_sentiment),
+        }
+        # Sentiment is corroboration, never the sole authority for execution.
+        if not (has_direct or has_foundation):
             return EnsembleResult(False, reason="no model output available")
-        values = [direct, foundation, sentiment]
-        edges = [2.0 * v - 1.0 for v in values]
-        weights = self._weights(sentiment)
-        edge = float(sum(w * e for w, e in zip(weights, edges)))
-        agreement = 1.0 - min(1.0, np.std(edges) / 1.25)
-        uncertainty = float(np.average(
-            [direct_uncertainty, foundation_uncertainty, 0.65], weights=weights
-        ))
-        score = float(np.clip(0.5 + 0.5 * edge * agreement * (1.0 - uncertainty), 0.0, 1.0))
+        score, edge, agreement, uncertainty, weights = _combine_signals(signals)
         return EnsembleResult(
             available=True, score=score, edge=edge, direct=direct,
             foundation=foundation, sentiment=sentiment, agreement=agreement,
             uncertainty=uncertainty, reason="ensemble evaluated",
             models=dict(self._loaded),
+            active_models=list(weights), weights=weights,
         )
-
-    @staticmethod
-    def _weights(sentiment: float) -> tuple[float, float, float]:
-        # Keep sentiment small during normal conditions; it is noisy.  Give it
-        # more influence only when it is materially directional.
-        if abs(sentiment - 0.5) >= 0.18:
-            return 0.40, 0.30, 0.30
-        return 0.45, 0.35, 0.20
 
     def _direct_score(self, asset: str, df: pd.DataFrame, direction: str,
                       strategy: str | None, timeframe: str,
                       entry: float | None, stop_loss: float | None,
-                      target: float | None) -> tuple[float, float]:
+                      target: float | None) -> tuple[float, float, bool]:
         # Existing calibrated outcome model is the first direct signal.  It is
         # broker/strategy-specific and therefore safer than a generic HF model.
         try:
@@ -204,53 +198,65 @@ class HFEnsemble:
             model_file = os.path.join(model_dir, f"{asset.upper()}_filter.joblib")
             metadata_file = os.path.join(model_dir, f"{asset.upper()}_filter.meta.json")
             if not os.path.exists(model_file) or not os.path.exists(metadata_file):
-                return 0.5, 1.0
+                return 0.5, 1.0, False
             with open(metadata_file, encoding="utf-8") as f:
                 if not json.load(f).get("active"):
-                    return 0.5, 1.0
+                    return 0.5, 1.0, False
             from app.ai_engine.signal_eval import predict_win_probability
             p = predict_win_probability(asset, df, direction, strategy, timeframe,
                                         entry, stop_loss, target)
             self._loaded["direct"] = "local outcome model"
-            return float(np.clip(p, 0.0, 1.0)), 0.25
+            return float(np.clip(p, 0.0, 1.0)), 0.25, True
         except Exception as exc:  # noqa: BLE001
             log.warning("Direct model unavailable: %s", exc)
-            return 0.5, 1.0
+            self._loaded.pop("direct", None)
+            return 0.5, 1.0, False
 
-    def _foundation_score(self, asset: str, df: pd.DataFrame) -> tuple[float, float]:
+    def _foundation_score(self, asset: str, df: pd.DataFrame,
+                          direction: str) -> tuple[float, float, bool]:
         # Chronos is optional. A native adapter is only attempted when enabled;
         # otherwise no fabricated forecast is allowed into the execution gate.
         model_id = settings.ai_foundation_model
         if not model_id:
-            return 0.5, 1.0
+            return 0.5, 1.0, False
         try:
             model = self._load_chronos()
             series = pd.to_numeric(df["close"], errors="coerce").dropna().tail(256)
             if len(series) < 40:
-                return 0.5, 1.0
+                return 0.5, 1.0, False
             forecast = model.predict(
                 torch.tensor(np.asarray(series, dtype=np.float32)),
                 prediction_length=settings.ai_forecast_horizon,
             )
             values = np.asarray(forecast[0])
-            median = float(np.median(values[:, -1] if values.ndim > 1 else values))
+            terminal = values[:, -1] if values.ndim > 1 else values
             last = float(series.iloc[-1])
-            p = 0.65 if median > last else 0.35 if median < last else 0.5
+            p_up = float(np.mean(terminal > last) + 0.5 * np.mean(terminal == last))
+            # Keep a small calibration guard against overconfident 20-sample
+            # forecasts, then map market direction to the proposed trade.
+            p_up = float(np.clip(p_up, 0.20, 0.80))
+            p = _for_trade_direction(p_up, direction)
             spread = float(np.std(values) / max(abs(last), 1e-9))
-            return p, float(np.clip(spread / max(settings.ai_uncertainty_scale, 1e-9), 0.0, 1.0))
+            directional_uncertainty = 1.0 - abs(2.0 * p_up - 1.0)
+            spread_floor = 0.25 * float(np.clip(
+                spread / max(settings.ai_uncertainty_scale, 1e-9), 0.0, 1.0
+            ))
+            uncertainty = max(directional_uncertainty, spread_floor)
+            return p, uncertainty, True
         except Exception as exc:  # noqa: BLE001
             log.warning("Foundation model unavailable (%s): %s", model_id, exc)
             self._loaded.pop("chronos", None)
             self._chronos = None
-            return 0.5, 1.0
+            return 0.5, 1.0, False
 
-    def _sentiment_score(self, asset: str) -> float:
+    def _sentiment_score(self, asset: str,
+                         direction: str) -> tuple[float, float, bool]:
         # The news route/service can populate a short-lived JSONL/cache later;
         # this adapter reads only the configured local cache and never scrapes
         # or calls a network endpoint inside the order path.
         path = settings.ai_sentiment_cache
         if not path or not os.path.exists(path):
-            return 0.5
+            return 0.5, 1.0, False
         try:
             import json
             with open(path, encoding="utf-8") as f:
@@ -261,16 +267,98 @@ class HFEnsemble:
                 if str(row.get("asset", "")).upper() not in {asset.upper(), "MACRO"}:
                     continue
                 age = max(0.0, now - float(row.get("timestamp", now)))
+                if age > 4.0 * settings.ai_sentiment_half_life_seconds:
+                    continue
                 decay = math.exp(-age / max(settings.ai_sentiment_half_life_seconds, 1.0))
                 score = float(row.get("score", 0.0))
                 vals.append((score, decay * float(row.get("confidence", 1.0))))
             if not vals:
-                return 0.5
+                return 0.5, 1.0, False
             total = sum(w for _, w in vals) or 1.0
-            return float(np.clip(0.5 + 0.5 * sum(v * w for v, w in vals) / total, 0.0, 1.0))
+            market_p = float(np.clip(
+                0.5 + 0.5 * sum(v * w for v, w in vals) / total, 0.0, 1.0
+            ))
+            confidence = min(1.0, total / max(len(vals), 1))
+            return _for_trade_direction(market_p, direction), 1.0 - confidence, True
         except Exception as exc:  # noqa: BLE001
             log.warning("Sentiment cache unavailable: %s", exc)
-            return 0.5
+            return 0.5, 1.0, False
+
+
+_BASE_WEIGHTS = {"direct": 0.45, "foundation": 0.35, "sentiment": 0.20}
+
+
+def _for_trade_direction(p_up: float, direction: str) -> float:
+    """Convert a market-up probability into support for BUY or SELL."""
+    p = float(np.clip(p_up, 0.0, 1.0))
+    return 1.0 - p if direction.upper() == "SELL" else p
+
+
+def _combine_signals(
+    signals: dict[str, tuple[float, float, bool]],
+) -> tuple[float, float, float, float, dict[str, float]]:
+    """Combine only available model outputs and renormalize their weights."""
+    active = {name: value for name, value in signals.items() if value[2]}
+    raw_total = sum(_BASE_WEIGHTS[name] for name in active)
+    if not active or raw_total <= 0:
+        return 0.5, 0.0, 0.0, 1.0, {}
+    weights = {name: _BASE_WEIGHTS[name] / raw_total for name in active}
+    probability = float(sum(weights[name] * active[name][0] for name in active))
+    uncertainty = float(sum(
+        weights[name] * float(np.clip(active[name][1], 0.0, 1.0))
+        for name in active
+    ))
+    edges = np.asarray([2.0 * active[name][0] - 1.0 for name in active], dtype=float)
+    agreement = 1.0 if len(edges) == 1 else float(
+        1.0 - min(1.0, float(np.std(edges)) / 1.25)
+    )
+    edge = 2.0 * probability - 1.0
+    # Uncertainty moderates conviction but does not inject a neutral/missing
+    # model into the vote. This allows one strong available model to validate
+    # a strategy while retaining a conservative confidence haircut.
+    quality = 1.0 - 0.5 * uncertainty
+    score = float(np.clip(
+        0.5 + (probability - 0.5) * agreement * quality, 0.0, 1.0
+    ))
+    return score, edge, agreement, uncertainty, weights
+
+
+_BASE_WEIGHTS = {"direct": 0.45, "foundation": 0.35, "sentiment": 0.20}
+
+
+def _for_trade_direction(p_up: float, direction: str) -> float:
+    """Convert a market-up probability into support for BUY or SELL."""
+    p = float(np.clip(p_up, 0.0, 1.0))
+    return 1.0 - p if direction.upper() == "SELL" else p
+
+
+def _combine_signals(
+    signals: dict[str, tuple[float, float, bool]],
+) -> tuple[float, float, float, float, dict[str, float]]:
+    """Combine only available model outputs and renormalize their weights."""
+    active = {name: value for name, value in signals.items() if value[2]}
+    raw_total = sum(_BASE_WEIGHTS[name] for name in active)
+    if not active or raw_total <= 0:
+        return 0.5, 0.0, 0.0, 1.0, {}
+    weights = {name: _BASE_WEIGHTS[name] / raw_total for name in active}
+    probability = float(sum(weights[name] * active[name][0] for name in active))
+    uncertainty = float(sum(
+        weights[name] * float(np.clip(active[name][1], 0.0, 1.0))
+        for name in active
+    ))
+    edges = np.asarray([2.0 * active[name][0] - 1.0 for name in active], dtype=float)
+    agreement = 1.0 if len(edges) == 1 else float(
+        1.0 - min(1.0, float(np.std(edges)) / 1.25)
+    )
+    edge = 2.0 * probability - 1.0
+    # Uncertainty moderates conviction but does not inject a neutral/missing
+    # model into the vote. This allows one strong available model to validate
+    # a strategy while retaining a conservative confidence haircut.
+    quality = 1.0 - 0.5 * uncertainty
+    score = float(np.clip(
+        0.5 + (probability - 0.5) * agreement * quality, 0.0, 1.0
+    ))
+    return score, edge, agreement, uncertainty, weights
 
 
 _ensemble = HFEnsemble()
