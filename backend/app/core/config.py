@@ -61,6 +61,20 @@ class Settings(BaseSettings):
     review_provider: str = ""
     review_model: str = ""
 
+    # Hugging Face ensemble. Models are lazy-loaded and must be explicitly
+    # enabled. Autonomous DEMO mode can use this gate; LIVE remains protected by
+    # ALLOW_LIVE and the execution-stage account check.
+    ai_ensemble_enabled: bool = False
+    ai_ensemble_blocking: bool = True
+    ai_min_bars: int = 60
+    ai_forecast_horizon: int = 3
+    ai_foundation_model: str = "amazon/chronos-t5-tiny"
+    ai_sentiment_model: str = "ProsusAI/finbert"
+    ai_model_local_only: bool = True
+    ai_sentiment_cache: str = ""
+    ai_sentiment_half_life_seconds: int = 1800
+    ai_uncertainty_scale: float = 0.01
+
     # App
     base_currency: str = "USD"
     # External historical-data archive (AlphaEdge's scheduled collector). Its CSVs

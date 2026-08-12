@@ -9,6 +9,11 @@ numpy==2.2.1
 pyarrow==18.1.0
 scikit-learn==1.6.0
 joblib==1.4.2
+transformers==4.48.3
+# Local-only Hugging Face runtimes. Torch is CPU-compatible for the DEMO
+# scanner; use the official CUDA wheel instead if this machine has a GPU.
+torch==2.13.0
+chronos-forecasting==2.3.1
 APScheduler==3.11.0
 # Windows only — install on the trading laptop:
 MetaTrader5==5.0.4874 ; sys_platform == "win32"

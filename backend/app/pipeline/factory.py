@@ -9,6 +9,7 @@ from app.pipeline.stages.risk import RiskConfig, RiskStage
 from app.pipeline.stages.strategy import StrategyStage
 from app.pipeline.stages.wiki_filter import WikiFilterStage
 from app.services.settings_store import money_settings
+from app.core.config import settings
 from app.strategies.base import Strategy
 from app.strategies.registry import build_strategy
 
@@ -67,7 +68,7 @@ def build_pipeline(
     stages = [
         MarketStage(),
         StrategyStage(strategy),
-        AIFilterStage(blocking=ai_blocking),
+        AIFilterStage(blocking=ai_blocking or settings.ai_ensemble_blocking),
         WikiFilterStage(enabled=wiki_enabled, blocking=wiki_blocking),
         RiskStage(risk_config, daily_loss_pct=daily_loss_pct),
     ]

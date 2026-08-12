@@ -18,6 +18,26 @@ class AIFilterStage(Stage):
             ctx.record(Decision(self.name, Verdict.SKIP, "No signal to score."))
             return ctx
         from app.ai_engine.model_trainer import model_metadata
+        from app.core.config import settings
+        if settings.ai_ensemble_enabled:
+            result = self._ensemble(ctx)
+            if not result.available:
+                verdict = Verdict.BLOCK if settings.ai_ensemble_blocking else Verdict.INFO
+                ctx.record(Decision(self.name, verdict,
+                                    f"AI ensemble unavailable: {result.reason}"))
+                return ctx
+            confidence = result.score
+            ctx.record(Decision(self.name, Verdict.INFO,
+                                f"HF ensemble score {confidence:.0%}; "
+                                f"direct={result.direct:.0%}, foundation={result.foundation:.0%}, "
+                                f"sentiment={result.sentiment:.0%}, agreement={result.agreement:.0%}, "
+                                f"uncertainty={result.uncertainty:.0%}.", score=confidence))
+            if settings.ai_ensemble_blocking and confidence < self.min_confidence:
+                ctx.record(Decision(self.name, Verdict.BLOCK,
+                                    f"HF ensemble confidence {confidence:.0%} < "
+                                    f"{self.min_confidence:.0%}.", score=confidence))
+            return ctx
+
         confidence = self._score(ctx)
         if not model_metadata(ctx.asset).get("active"):
             ctx.record(Decision(self.name,
@@ -37,6 +57,14 @@ class AIFilterStage(Stage):
             ctx.record(Decision(self.name, Verdict.PASS,
                                 f"Confidence {confidence:.0%}.", score=confidence))
         return ctx
+
+    def _ensemble(self, ctx: TradeContext):
+        from app.ai_engine.hf_ensemble import evaluate_ensemble
+        sig = ctx.signal
+        return evaluate_ensemble(
+            ctx.asset, ctx.market_data, sig.direction.value, ctx.strategy,
+            ctx.timeframe, sig.entry, sig.stop_loss, sig.target,
+        )
 
     def _score(self, ctx: TradeContext) -> float:
         from app.ai_engine.signal_eval import predict_win_probability
