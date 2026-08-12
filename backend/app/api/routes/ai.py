@@ -36,3 +36,10 @@ def train(req: TrainRequest) -> dict:
 @router.get("/status")
 def status() -> dict:
     return {a: {**model_metadata(a), "model_trained": has_model(a)} for a in SUPPORTED_ASSETS}
+
+
+@router.get("/readiness")
+def readiness(deep: bool = False) -> dict:
+    """Local AI health. ``deep=true`` loads models and runs smoke inference."""
+    from app.ai_engine.hf_ensemble import ai_readiness
+    return ai_readiness(deep=deep)

@@ -15,29 +15,64 @@ _lock = Lock()
 _classifier = None
 
 
+def _load_classifier():
+    global _classifier
+    if _classifier is None:
+        from app.ai_engine.hf_ensemble import _prepare_local_torch
+        _prepare_local_torch()
+        from transformers import AutoModelForSequenceClassification, AutoTokenizer
+        from transformers import pipeline
+        tokenizer = AutoTokenizer.from_pretrained(
+            settings.ai_sentiment_model,
+            local_files_only=settings.ai_model_local_only,
+        )
+        model = AutoModelForSequenceClassification.from_pretrained(
+            settings.ai_sentiment_model,
+            local_files_only=settings.ai_model_local_only,
+        )
+        _classifier = pipeline(
+            "text-classification", model=model, tokenizer=tokenizer, top_k=None,
+        )
+    return _classifier
+
+
+def sentiment_readiness(deep: bool = False) -> dict[str, Any]:
+    """Report FinBERT package/cache readiness and optionally test inference."""
+    import importlib.util
+    package = importlib.util.find_spec("transformers") is not None
+    cached = False
+    try:
+        from huggingface_hub import try_to_load_from_cache
+        path = try_to_load_from_cache(settings.ai_sentiment_model, "config.json")
+        cached = isinstance(path, str) and os.path.exists(path)
+    except Exception:  # noqa: BLE001
+        pass
+    error: str | None = None
+    inference_ok = False
+    if deep and package and cached:
+        try:
+            result = _load_classifier()("Markets are stable.")
+            inference_ok = bool(result)
+        except Exception as exc:  # noqa: BLE001
+            error = str(exc)
+    ready = package and cached and (not deep or inference_ok)
+    return {
+        "ready": ready,
+        "package_installed": package,
+        "model_id": settings.ai_sentiment_model,
+        "cached": cached,
+        "loaded": _classifier is not None,
+        "inference_ok": inference_ok if deep else None,
+        "error": error,
+    }
+
+
 def score_text(text: str, asset: str = "MACRO", source: str = "manual") -> dict[str, Any]:
     """Score one headline with ProsusAI/finbert and append a compact cache row."""
-    global _classifier
     if not text.strip():
         raise ValueError("text is required")
     try:
-        if _classifier is None:
-            from app.ai_engine.hf_ensemble import _prepare_local_torch
-            _prepare_local_torch()
-            from transformers import AutoModelForSequenceClassification, AutoTokenizer
-            from transformers import pipeline
-            tokenizer = AutoTokenizer.from_pretrained(
-                settings.ai_sentiment_model,
-                local_files_only=settings.ai_model_local_only,
-            )
-            model = AutoModelForSequenceClassification.from_pretrained(
-                settings.ai_sentiment_model,
-                local_files_only=settings.ai_model_local_only,
-            )
-            _classifier = pipeline(
-                "text-classification", model=model, tokenizer=tokenizer, top_k=None,
-            )
-        raw = _classifier(text[:2000])
+        raw = _load_classifier()(text[:2000])
         labels = raw[0] if raw and isinstance(raw[0], list) else raw
         probs = {str(x["label"]).lower(): float(x["score"]) for x in labels}
         positive = probs.get("positive", 0.0)

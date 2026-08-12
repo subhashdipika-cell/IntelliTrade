@@ -9,7 +9,7 @@ safe HOLD by the pipeline.
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
-import hashlib
+import importlib.util
 import math
 import os
 import time
@@ -78,6 +78,74 @@ class HFEnsemble:
         self._chronos = None
         self._moirai = None
         self._loaded: dict[str, str] = {}
+
+    def readiness(self, deep: bool = False) -> dict[str, Any]:
+        """Report local model readiness without making network requests.
+
+        The default check is lightweight (packages + cache + loaded state).
+        ``deep=True`` also loads each cached model and runs a tiny local smoke
+        inference. It may take several seconds on the first CPU invocation.
+        """
+        torch_ready = torch is not None
+        chronos_package = importlib.util.find_spec("chronos") is not None
+        chronos_cached = _model_cached(settings.ai_foundation_model)
+        chronos_error: str | None = None
+        chronos_inference = False
+
+        if deep and torch_ready and chronos_package and chronos_cached:
+            try:
+                model = self._load_chronos()
+                forecast = model.predict(
+                    torch.linspace(100.0, 101.0, 64), prediction_length=1
+                )
+                chronos_inference = bool(getattr(forecast, "numel", lambda: 0)())
+            except Exception as exc:  # noqa: BLE001
+                chronos_error = str(exc)
+
+        from app.ai_engine.sentiment_service import sentiment_readiness
+        finbert = sentiment_readiness(deep=deep)
+        chronos_loaded = self._chronos is not None
+        chronos_ready = (
+            torch_ready and chronos_package and chronos_cached
+            and (not deep or chronos_inference)
+        )
+        execution_ready = settings.ai_ensemble_enabled and chronos_ready
+        return {
+            "ready": execution_ready,
+            "all_models_ready": execution_ready and bool(finbert["ready"]),
+            "mode": "local",
+            "local_only": settings.ai_model_local_only,
+            "blocking": settings.ai_ensemble_blocking,
+            "deep_check": deep,
+            "torch": {
+                "ready": torch_ready,
+                "version": getattr(torch, "__version__", None),
+                "error": None if torch_ready else str(_TORCH_IMPORT_ERROR),
+            },
+            "chronos": {
+                "ready": chronos_ready,
+                "package_installed": chronos_package,
+                "model_id": settings.ai_foundation_model,
+                "cached": chronos_cached,
+                "loaded": chronos_loaded,
+                "inference_ok": chronos_inference if deep else None,
+                "error": chronos_error,
+            },
+            "finbert": finbert,
+        }
+
+    def _load_chronos(self):
+        _prepare_local_torch()
+        if self._chronos is None:
+            from chronos import ChronosPipeline  # type: ignore
+            self._chronos = ChronosPipeline.from_pretrained(
+                settings.ai_foundation_model,
+                device_map="auto",
+                torch_dtype="auto",
+                local_files_only=settings.ai_model_local_only,
+            )
+            self._loaded["chronos"] = settings.ai_foundation_model
+        return self._chronos
 
     def evaluate(self, asset: str, df: pd.DataFrame, direction: str,
                  strategy: str | None, timeframe: str,
@@ -156,18 +224,11 @@ class HFEnsemble:
         if not model_id:
             return 0.5, 1.0
         try:
-            _prepare_local_torch()
-            if "chronos" not in self._loaded:
-                from chronos import ChronosPipeline  # type: ignore
-                self._chronos = ChronosPipeline.from_pretrained(
-                    model_id, device_map="auto", torch_dtype="auto",
-                    local_files_only=settings.ai_model_local_only,
-                )
-                self._loaded["chronos"] = model_id
+            model = self._load_chronos()
             series = pd.to_numeric(df["close"], errors="coerce").dropna().tail(256)
             if len(series) < 40:
                 return 0.5, 1.0
-            forecast = self._chronos.predict(
+            forecast = model.predict(
                 torch.tensor(np.asarray(series, dtype=np.float32)),
                 prediction_length=settings.ai_forecast_horizon,
             )
@@ -179,7 +240,8 @@ class HFEnsemble:
             return p, float(np.clip(spread / max(settings.ai_uncertainty_scale, 1e-9), 0.0, 1.0))
         except Exception as exc:  # noqa: BLE001
             log.warning("Foundation model unavailable (%s): %s", model_id, exc)
-            self._loaded["chronos"] = f"unavailable: {model_id}"
+            self._loaded.pop("chronos", None)
+            self._chronos = None
             return 0.5, 1.0
 
     def _sentiment_score(self, asset: str) -> float:
@@ -214,5 +276,20 @@ class HFEnsemble:
 _ensemble = HFEnsemble()
 
 
+def _model_cached(model_id: str) -> bool:
+    if not model_id:
+        return False
+    try:
+        from huggingface_hub import try_to_load_from_cache
+        path = try_to_load_from_cache(model_id, "config.json")
+        return isinstance(path, str) and os.path.exists(path)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def evaluate_ensemble(*args, **kwargs) -> EnsembleResult:
     return _ensemble.evaluate(*args, **kwargs)
+
+
+def ai_readiness(deep: bool = False) -> dict[str, Any]:
+    return _ensemble.readiness(deep=deep)

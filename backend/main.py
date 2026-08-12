@@ -29,6 +29,17 @@ log = get_logger("main")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_logging()
+    try:
+        from app.ai_engine.hf_ensemble import ai_readiness
+        ai = ai_readiness(deep=False)
+        log.info(
+            "AI readiness: ready=%s mode=%s local_only=%s torch=%s "
+            "chronos_cached=%s finbert_cached=%s",
+            ai["ready"], ai["mode"], ai["local_only"], ai["torch"]["ready"],
+            ai["chronos"]["cached"], ai["finbert"]["cached"],
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.warning("AI readiness check failed: %s", exc)
     connected = mt5_client.connect()
     log.info("MT5 connected: %s", connected)
     if connected:
