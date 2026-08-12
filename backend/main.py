@@ -3,6 +3,15 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
+# Windows/CPU compatibility: preload Torch before the AI route imports
+# scikit-learn/joblib and their native OpenMP libraries. If the machine still
+# cannot initialize Torch, the server must start and the AI stage will HOLD.
+try:
+    from app.ai_engine.hf_ensemble import _prepare_local_torch
+    _prepare_local_torch()
+except Exception:
+    pass
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

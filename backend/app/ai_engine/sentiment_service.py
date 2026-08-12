@@ -22,10 +22,20 @@ def score_text(text: str, asset: str = "MACRO", source: str = "manual") -> dict[
         raise ValueError("text is required")
     try:
         if _classifier is None:
+            from app.ai_engine.hf_ensemble import _prepare_local_torch
+            _prepare_local_torch()
+            from transformers import AutoModelForSequenceClassification, AutoTokenizer
             from transformers import pipeline
+            tokenizer = AutoTokenizer.from_pretrained(
+                settings.ai_sentiment_model,
+                local_files_only=settings.ai_model_local_only,
+            )
+            model = AutoModelForSequenceClassification.from_pretrained(
+                settings.ai_sentiment_model,
+                local_files_only=settings.ai_model_local_only,
+            )
             _classifier = pipeline(
-                "text-classification", model=settings.ai_sentiment_model,
-                tokenizer=settings.ai_sentiment_model, top_k=None,
+                "text-classification", model=model, tokenizer=tokenizer, top_k=None,
             )
         raw = _classifier(text[:2000])
         labels = raw[0] if raw and isinstance(raw[0], list) else raw

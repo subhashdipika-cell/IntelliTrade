@@ -15,6 +15,23 @@ import os
 import time
 from typing import Any
 
+# Windows compatibility: Torch must initialize before NumPy/Pandas native
+# libraries are loaded, otherwise c10.dll can intermittently report 1114.
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+try:
+    import torch  # type: ignore
+    _TORCH_IMPORT_ERROR: Exception | None = None
+    try:
+        torch.set_num_threads(1)
+        torch.set_num_interop_threads(1)
+    except RuntimeError:
+        pass
+except Exception as exc:  # noqa: BLE001
+    torch = None  # type: ignore
+    _TORCH_IMPORT_ERROR = exc
+
 import numpy as np
 import pandas as pd
 
@@ -22,6 +39,18 @@ from app.core.config import settings
 from app.core.logging_setup import get_logger
 
 log = get_logger("ai_engine.hf_ensemble")
+
+
+def _prepare_local_torch() -> None:
+    """Preload Torch before Chronos/Transformers on Windows.
+
+    On this machine, importing Chronos first intermittently caused Torch's
+    c10.dll to fail with WinError 1114. Preloading Torch and limiting CPU
+    threads avoids the DLL/OpenMP initialization race without changing the
+    broker or scanner processes.
+    """
+    if torch is None:
+        raise RuntimeError(f"Torch initialization failed: {_TORCH_IMPORT_ERROR}")
 
 
 @dataclass
@@ -127,6 +156,7 @@ class HFEnsemble:
         if not model_id:
             return 0.5, 1.0
         try:
+            _prepare_local_torch()
             if "chronos" not in self._loaded:
                 from chronos import ChronosPipeline  # type: ignore
                 self._chronos = ChronosPipeline.from_pretrained(
@@ -138,7 +168,7 @@ class HFEnsemble:
             if len(series) < 40:
                 return 0.5, 1.0
             forecast = self._chronos.predict(
-                context=np.asarray(series, dtype=np.float32),
+                torch.tensor(np.asarray(series, dtype=np.float32)),
                 prediction_length=settings.ai_forecast_horizon,
             )
             values = np.asarray(forecast[0])
