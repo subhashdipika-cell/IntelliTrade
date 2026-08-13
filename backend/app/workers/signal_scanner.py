@@ -22,6 +22,7 @@ from app.services import telegram
 from app.services.history_store import history_store
 from app.services.mt5_client import mt5_client
 from app.services.scanner_store import scanner_settings
+from app.services.scanner_decision_store import scanner_decisions
 from app.services.settings_store import money_settings
 from app.services.trade_store import open_trades
 
@@ -109,6 +110,10 @@ class SignalScanner:
                 )
                 ctx = pipeline.run(ctx)
                 if ctx.blocked or ctx.signal is None:
+                    scanner_decisions.record(
+                        ctx, bar_time=str(df.index[i]), mode=s.mode,
+                        catchup=i < len(df) - 1,
+                    )
                     continue
 
                 # A signal from an older missed bar is only worth acting on
@@ -118,30 +123,48 @@ class SignalScanner:
                     atr = self._atr14(df)
                     drift = abs(float(df["close"].iloc[-1]) - float(df["close"].iloc[i]))
                     if atr and drift > 0.75 * atr:
+                        scanner_decisions.record(
+                            ctx, bar_time=str(df.index[i]), mode=s.mode,
+                            status="blocked", blocker="scanner_guard",
+                            reason=f"Catch-up signal stale: drift {drift:.2f} > 0.75 ATR {atr:.2f}.",
+                            catchup=True,
+                        )
                         log.info("Catch-up signal stale [%s] bar=%s drift=%.2f ATR=%.2f — skipped.",
                                  key, df.index[i], drift, atr)
                         continue
                     log.info("Catch-up signal [%s]: missed bar %s recovered.", key, df.index[i])
 
                 if s.mode == "autonomous":
-                    self._maybe_execute(asset, ctx)
+                    status, blocker, reason = self._maybe_execute(asset, ctx)
                 else:
                     telegram.send_setup_alert(ctx.signal, ctx.capital_deployed, ctx.total_capital)
                     log.info("ALERT-ONLY setup [%s]: %s %s @ %s",
                              ctx.strategy, ctx.signal.direction.value, asset, ctx.signal.entry)
+                    status, blocker, reason = "alerted", None, "Setup alert sent."
+                scanner_decisions.record(
+                    ctx, bar_time=str(df.index[i]), mode=s.mode,
+                    status=status, blocker=blocker, reason=reason,
+                    catchup=i < len(df) - 1,
+                )
                 break  # one action per strategy per scan — guardrails stay simple
 
-    def _maybe_execute(self, asset: str, ctx: TradeContext) -> None:
+    def _maybe_execute(self, asset: str, ctx: TradeContext) -> tuple[str, str | None, str]:
         # Guardrail: one open position per asset.
         if self._has_open_position(asset):
             log.info("Skip %s: position already open.", asset)
-            return
+            return "blocked", "scanner_guard", "Position already open for asset."
         # Guardrail: max concurrent open trades.
         max_open = money_settings.get().max_open_trades
         if len(open_trades) >= max_open:
             log.info("Skip %s: max open trades (%d) reached.", asset, max_open)
-            return
+            return "blocked", "scanner_guard", f"Maximum open trades ({max_open}) reached."
         ExecutionStage().process(ctx)  # places order, entry alert, registers w/ monitor
+        if ctx.blocked:
+            last = ctx.decisions[-1] if ctx.decisions else None
+            return "blocked", ctx.blocked_by or "execution", (
+                last.reason if last else "Execution blocked."
+            )
+        return "executed", None, f"Order placed (ticket={ctx.ticket})."
 
     @staticmethod
     def _atr14(df) -> float:

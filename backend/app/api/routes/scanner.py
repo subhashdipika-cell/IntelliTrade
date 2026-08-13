@@ -8,6 +8,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.services.scanner_store import VALID_MODES, scanner_settings
+from app.services.scanner_decision_store import scanner_decisions
 from app.strategies.registry import list_strategies
 from app.workers.signal_scanner import signal_scanner
 
@@ -42,3 +43,17 @@ def update_settings(patch: ScannerPatch) -> dict:
 @router.get("/status")
 def status() -> dict:
     return signal_scanner.status()
+
+
+@router.get("/decisions")
+def decisions(limit: int = 100, asset: str | None = None,
+              strategy: str | None = None, status: str | None = None) -> dict:
+    rows = scanner_decisions.recent(
+        limit=limit, asset=asset, strategy=strategy, status=status,
+    )
+    return {"count": len(rows), "decisions": rows}
+
+
+@router.get("/blockers")
+def blockers(hours: int = 24) -> dict:
+    return scanner_decisions.blocker_summary(hours=hours)
