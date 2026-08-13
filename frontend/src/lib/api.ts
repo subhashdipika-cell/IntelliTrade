@@ -21,6 +21,8 @@ export const api = {
   scannerSettings: () => request("/scanner/settings"),
   saveScannerSettings: (body: unknown) =>
     request("/scanner/settings", { method: "PUT", body: JSON.stringify(body) }),
+  scannerBlockers: (hours = 24) => request(`/scanner/blockers?hours=${hours}`),
+  scannerDecisions: (limit = 100) => request(`/scanner/decisions?limit=${limit}`),
   moneyOverview: () => request("/money/overview"),
   saveMoneySettings: (body: unknown) =>
     request("/money/settings", { method: "PUT", body: JSON.stringify(body) }),

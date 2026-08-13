@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { DecisionTree, type Decision } from "@/components/DecisionTree";
 import { ScannerPanel } from "@/components/ScannerPanel";
+import { BlockerSummary } from "@/components/BlockerSummary";
 
 interface RunResult {
   asset: string;
@@ -124,6 +125,8 @@ export default function LivePage() {
       <h2 className="text-2xl font-bold">Live — Run Signal Through Pipeline</h2>
 
       <ScannerPanel />
+
+      <BlockerSummary />
 
       {/* ── Controls ───────────────────────────────────────────── */}
       <div className="bg-[#0a0d12] border border-gray-800 rounded-xl p-5">
