@@ -1,1 +1,4 @@
-{"enforce": false}
+{
+  "enforce": true,
+  "min_rr_structure": 1.8
+}

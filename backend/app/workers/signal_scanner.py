@@ -149,6 +149,14 @@ class SignalScanner:
                 break  # one action per strategy per scan — guardrails stay simple
 
     def _maybe_execute(self, asset: str, ctx: TradeContext) -> tuple[str, str | None, str]:
+        # Autonomous scanning is explicitly Demo-only. Do not rely solely on
+        # ExecutionStage: block before any execution attempt if the terminal's
+        # verified account type is unavailable or not DEMO.
+        verified = mt5_client.verify_account_type()
+        if verified != "DEMO":
+            reason = f"Autonomous scanner requires verified DEMO account; terminal reports {verified!r}."
+            log.warning("Skip %s: %s", asset, reason)
+            return "blocked", "account_guard", reason
         # Guardrail: one open position per asset.
         if self._has_open_position(asset):
             log.info("Skip %s: position already open.", asset)
