@@ -1,0 +1,34 @@
+{
+  "enabled": true,
+  "mode": "autonomous",
+  "assets": [
+    "GOLD",
+    "BTC",
+    "ETH"
+  ],
+  "strategies": [
+    "price_action_scalp"
+  ],
+  "timeframe": "M5",
+  "wiki_enabled": false,
+  "strategies_by_asset": {
+    "GOLD": [
+      "price_action_scalp",
+      "smt_gold_macd_trend",
+      "range_reversion_scalp",
+      "smc_confluence",
+      "donchian_breakout",
+      "break_retest"
+    ],
+    "BTC": [
+      "price_action_scalp",
+      "smc_confluence",
+      "donchian_breakout",
+      "break_retest",
+      "macd_cross"
+    ],
+    "ETH": [
+      "donchian_breakout"
+    ]
+  }
+}
