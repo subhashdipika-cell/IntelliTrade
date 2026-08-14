@@ -12,10 +12,10 @@ standing setup isn't traded repeatedly. The forming bar is dropped before
 evaluation so signals fire on completed candles only."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.core.logging_setup import get_logger
-from app.pipeline.context import TradeContext
+from app.pipeline.context import Decision, TradeContext, Verdict
 from app.pipeline.factory import build_pipeline
 from app.pipeline.stages.execution import ExecutionStage
 from app.services import telegram
@@ -52,7 +52,7 @@ class SignalScanner:
                 log.warning("Scan failed for %s: %s", asset, exc)
 
     def _scan_asset(self, asset: str, s) -> None:
-        from app.strategies.registry import strategy_scan_timeframe
+        from app.strategies.registry import strategy_scan_lookback, strategy_scan_timeframe
 
         daily_loss = self._daily_loss_pct()
 
@@ -64,10 +64,17 @@ class SignalScanner:
         # global s.timeframe, but a strategy may declare its own (e.g. the M5
         # gold scalp), so we honour that without refetching for each strategy.
         df_cache: dict[str, object] = {}
+        lookback_by_tf: dict[str, int] = {}
+        for name in asset_strategies:
+            tf_name = strategy_scan_timeframe(name) or s.timeframe
+            lookback_by_tf[tf_name] = max(
+                lookback_by_tf.get(tf_name, 500), strategy_scan_lookback(name)
+            )
 
         def bars(tf: str):
             if tf not in df_cache:
-                d = mt5_client.fetch_ohlcv(asset, tf, 500)
+                lookback = lookback_by_tf.get(tf, 500)
+                d = mt5_client.fetch_ohlcv(asset, tf, lookback)
                 df_cache[tf] = d.iloc[:-1] if (d is not None and len(d) >= 3) else None
             return df_cache[tf]
 
@@ -102,6 +109,14 @@ class SignalScanner:
             for i in idxs:
                 sub = df if i == len(df) - 1 else df.iloc[: i + 1]
                 ctx = TradeContext(asset=asset, timeframe=tf, market_data=sub)
+                news_reason = self._gold_news_block(asset, strat, df.index[i])
+                if news_reason:
+                    ctx.record(Decision("news", Verdict.BLOCK, news_reason))
+                    scanner_decisions.record(
+                        ctx, bar_time=str(df.index[i]), mode=s.mode,
+                        catchup=i < len(df) - 1,
+                    )
+                    continue
                 pipeline = build_pipeline(
                     strategy_name=strat,
                     wiki_enabled=s.wiki_enabled,
@@ -209,6 +224,37 @@ class SignalScanner:
         if not balance:
             return 0.0
         return max(0.0, -pnl / balance * 100)
+
+    @staticmethod
+    def _gold_news_block(asset: str, strategy: str, bar_time) -> str | None:
+        """Block the new Gold session strategy around high-impact USD news.
+
+        The calendar is cached by economic_calendar and is optional: a stale or
+        unavailable feed does not create a false claim that an event was absent.
+        The strategy's ATR/ADX filters remain active as the deterministic fallback.
+        """
+        if asset != "GOLD" or strategy != "gold_session_break_retest":
+            return None
+        try:
+            from app.services.economic_calendar import get_events
+            events = get_events(impact="High", currencies=("USD",)).get("events", [])
+            stamp = datetime.fromisoformat(str(bar_time))
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=timezone(timedelta(hours=3)))
+            stamp = stamp.astimezone(timezone.utc)
+            for event in events:
+                raw = event.get("iso")
+                if not raw:
+                    continue
+                event_at = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+                if event_at.tzinfo is None:
+                    event_at = event_at.replace(tzinfo=timezone.utc)
+                minutes = (stamp - event_at.astimezone(timezone.utc)).total_seconds() / 60
+                if -30 <= minutes <= 15:
+                    return f"High-impact USD event window: {event.get('title') or 'calendar event'}"
+        except Exception as exc:  # noqa: BLE001 — news is an advisory guard
+            log.warning("Gold news guard unavailable: %s", exc)
+        return None
 
 
 signal_scanner = SignalScanner()

@@ -18,14 +18,16 @@
       "range_reversion_scalp",
       "smc_confluence",
       "donchian_breakout",
-      "break_retest"
+      "break_retest",
+      "gold_session_break_retest"
     ],
     "BTC": [
       "price_action_scalp",
       "smc_confluence",
       "donchian_breakout",
       "break_retest",
-      "macd_cross"
+      "macd_cross",
+      "btc_volatility_break_retest"
     ],
     "ETH": [
       "donchian_breakout"

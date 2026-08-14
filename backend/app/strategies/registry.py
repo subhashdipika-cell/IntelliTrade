@@ -16,12 +16,14 @@ from app.strategies.macd_cross import MacdCross
 from app.strategies.momentum_pinball import MomentumPinball
 from app.strategies.price_action_scalp import PriceActionScalp
 from app.strategies.gold_macd_trend import GoldMacdTrend
+from app.strategies.gold_session_break_retest import GoldSessionBreakRetest
 from app.strategies.range_reversion_scalp import RangeReversionScalp
 from app.strategies.hybrid_gold_m1_scalp import HybridGoldM1Scalp
 from app.strategies.smc_confluence import SmcConfluence
 from app.strategies.rsi_reversion import RsiReversion
 from app.strategies.sma_crossover import SmaCrossover
 from app.strategies.turtle_soup import TurtleSoup
+from app.strategies.btc_volatility_break_retest import BtcVolatilityBreakRetest
 
 _REGISTRY: dict[str, type[Strategy]] = {
     "sma_crossover": SmaCrossover,
@@ -35,9 +37,11 @@ _REGISTRY: dict[str, type[Strategy]] = {
     "gold_m5_pullback": GoldM5Pullback,
     "price_action_scalp": PriceActionScalp,
     "smt_gold_macd_trend": GoldMacdTrend,
+    "gold_session_break_retest": GoldSessionBreakRetest,
     "range_reversion_scalp": RangeReversionScalp,
     "hybrid_gold_m1_scalp": HybridGoldM1Scalp,
     "smc_confluence": SmcConfluence,
+    "btc_volatility_break_retest": BtcVolatilityBreakRetest,
     # Street Smarts (Connors & Raschke) swing patterns — H4 by default.
     # Registered = selectable for backtest/live; deploying them live still
     # requires adding them to the scanner's per-asset strategy settings.
@@ -57,6 +61,12 @@ def strategy_scan_timeframe(name: str) -> str | None:
     global one (class attribute, read without instantiating)."""
     cls = _REGISTRY.get(name)
     return getattr(cls, "scan_timeframe", None) if cls else None
+
+
+def strategy_scan_lookback(name: str) -> int:
+    """Number of closed bars needed by the live scanner for a strategy."""
+    cls = _REGISTRY.get(name)
+    return int(getattr(cls, "scan_lookback", 500) if cls else 500)
 
 
 def build_strategy(name: str, params: dict | None = None) -> Strategy:
