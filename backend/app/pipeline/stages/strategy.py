@@ -21,10 +21,12 @@ class StrategyStage(Stage):
 
     def process(self, ctx: TradeContext) -> TradeContext:
         ctx.strategy = self.strategy.name
+        self.strategy.last_reason = None
         signal = self.strategy.generate(ctx.asset, ctx.market_data, ctx.timeframe)
         if signal is None:
+            reason = getattr(self.strategy, "last_reason", None)
             ctx.record(Decision(self.name, Verdict.BLOCK,
-                                f"No setup from '{self.strategy.name}'."))
+                                reason or f"No setup from '{self.strategy.name}'."))
             return ctx
         ctx.signal = signal
         ctx.record(Decision(

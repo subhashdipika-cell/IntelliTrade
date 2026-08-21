@@ -29,10 +29,10 @@ class BtcVolatilityBreakRetest(Strategy):
         regime_fast: int = 50,
         regime_slow: int = 200,
         adx_period: int = 14,
-        min_adx: float = 20.0,
-        min_atr_percentile: float = 20.0,
-        max_atr_percentile: float = 90.0,
-        break_atr: float = 0.20,
+        min_adx: float = 18.0,
+        min_atr_percentile: float = 15.0,
+        max_atr_percentile: float = 95.0,
+        break_atr: float = 0.15,
         retest_atr: float = 0.20,
         stop_buffer_atr: float = 0.20,
         min_risk_atr: float = 0.80,
@@ -96,7 +96,12 @@ class BtcVolatilityBreakRetest(Strategy):
     def _scan(self, asset: str, df: pd.DataFrame, timeframe: str) -> list[Signal | None]:
         n = 0 if df is None else len(df)
         out: list[Signal | None] = [None] * n
-        if asset != "BTC" or n < self.regime_slow + self.lookback + 10:
+        if asset != "BTC":
+            self.last_reason = "Asset filter: strategy is scoped to BTC."
+            return out
+        minimum = self.regime_slow + self.lookback + 10
+        if n < minimum:
+            self.last_reason = f"Insufficient history: {n} bars; need {minimum}."
             return out
 
         close = df["close"].astype(float)
@@ -113,9 +118,15 @@ class BtcVolatilityBreakRetest(Strategy):
         pending = 0
         level = np.nan
         age = 0
+        last_reason = "No breakout or retest confirmed on the latest closed bar."
         for i in range(self.regime_slow + self.lookback + 5, n):
             a = float(atr.iloc[i]) if np.isfinite(atr.iloc[i]) else np.nan
-            if not np.isfinite(a) or a <= 0 or not self._weekday_session(df.index[i]):
+            if not np.isfinite(a) or a <= 0:
+                last_reason = "Volatility filter: ATR unavailable or zero."
+                pending = 0
+                continue
+            if not self._weekday_session(df.index[i]):
+                last_reason = "Weekend filter: new BTC entries are paused."
                 pending = 0
                 continue
             up = fast.iloc[i] > slow.iloc[i] and fast.iloc[i] > fast.iloc[i - 3]
@@ -127,12 +138,14 @@ class BtcVolatilityBreakRetest(Strategy):
                 and self.min_atr_percentile <= atr_pct.iloc[i] <= self.max_atr_percentile
             )
             if not regime_ok:
+                last_reason = "Regime filter: ADX or ATR percentile outside bounds."
                 pending = 0
                 continue
 
             c, h, l = float(close.iloc[i]), float(high.iloc[i]), float(low.iloc[i])
             bar_range = h - l
             if bar_range > 2.5 * a:
+                last_reason = "Volatility shock filter: candle range exceeds 2.5 ATR."
                 pending = 0
                 continue
             if pending:
@@ -148,6 +161,7 @@ class BtcVolatilityBreakRetest(Strategy):
                         if self.min_risk_atr * a <= risk <= self.max_risk_atr * a:
                             out[i] = Signal(asset, Direction.BUY, c, round(sl, 5),
                                             round(c + self.rr * risk, 5), timeframe)
+                            last_reason = "Signal confirmed: bullish breakout retest."
                             pending = 0
                 elif pending == -1 and down:
                     if c > level + self.retest_atr * a:
@@ -158,12 +172,16 @@ class BtcVolatilityBreakRetest(Strategy):
                         if self.min_risk_atr * a <= risk <= self.max_risk_atr * a:
                             out[i] = Signal(asset, Direction.SELL, c, round(sl, 5),
                                             round(c - self.rr * risk, 5), timeframe)
+                            last_reason = "Signal confirmed: bearish breakout retest."
                             pending = 0
 
             if pending == 0 and up and c > float(prior_high.iloc[i]) + self.break_atr * a:
                 pending, level, age = 1, float(prior_high.iloc[i]), 0
+                last_reason = "Breakout detected: waiting for bullish retest."
             elif pending == 0 and down and c < float(prior_low.iloc[i]) - self.break_atr * a:
                 pending, level, age = -1, float(prior_low.iloc[i]), 0
+                last_reason = "Breakout detected: waiting for bearish retest."
+        self.last_reason = last_reason
         return out
 
     def generate(self, asset: str, df: pd.DataFrame, timeframe: str) -> Signal | None:

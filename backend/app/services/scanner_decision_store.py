@@ -131,6 +131,7 @@ class ScannerDecisionStore:
             "passed": len(rows) - len(blocked),
             "by_stage": dict(Counter(r.get("blocked_by") or "unknown" for r in blocked)),
             "by_strategy": dict(Counter(r.get("strategy") or "unknown" for r in blocked)),
+            "by_reason": dict(Counter(_reason_group(r.get("reason")) for r in blocked)),
             "latest": list(reversed(blocked[-20:])),
         }
 
@@ -141,6 +142,22 @@ def _timestamp(value: Any) -> datetime:
         return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
     except (TypeError, ValueError):
         return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _reason_group(value: Any) -> str:
+    reason = str(value or "unknown")
+    lowered = reason.lower()
+    if reason.startswith("No setup from"):
+        return "no_setup_unclassified"
+    if any(word in lowered for word in ("weekend", "session", "overlap")):
+        return "session_filter"
+    if any(word in lowered for word in ("regime", "adx", "atr percentile")):
+        return "regime_filter"
+    if any(word in lowered for word in ("breakout", "retest")):
+        return "trigger_not_confirmed"
+    if any(word in lowered for word in ("history", "bars")):
+        return "insufficient_history"
+    return reason[:80]
 
 
 scanner_decisions = ScannerDecisionStore()

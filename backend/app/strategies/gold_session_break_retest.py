@@ -35,10 +35,10 @@ class GoldSessionBreakRetest(Strategy):
         regime_slow: int = 50,
         regime_long: int = 200,
         adx_period: int = 14,
-        min_adx: float = 20.0,
-        min_atr_percentile: float = 25.0,
-        max_atr_percentile: float = 90.0,
-        break_atr: float = 0.10,
+        min_adx: float = 18.0,
+        min_atr_percentile: float = 15.0,
+        max_atr_percentile: float = 95.0,
+        break_atr: float = 0.08,
         retest_atr: float = 0.15,
         stop_buffer_atr: float = 0.25,
         min_risk_atr: float = 0.75,
@@ -104,7 +104,12 @@ class GoldSessionBreakRetest(Strategy):
     def _scan(self, asset: str, df: pd.DataFrame, timeframe: str) -> list[Signal | None]:
         n = 0 if df is None else len(df)
         out: list[Signal | None] = [None] * n
-        if asset != "GOLD" or n < self.regime_long * 4 + self.lookback + 10:
+        if asset != "GOLD":
+            self.last_reason = "Asset filter: strategy is scoped to GOLD."
+            return out
+        minimum = self.regime_long * 4 + self.lookback + 10
+        if n < minimum:
+            self.last_reason = f"Insufficient history: {n} bars; need {minimum}."
             return out
 
         close = df["close"].astype(float)
@@ -122,9 +127,16 @@ class GoldSessionBreakRetest(Strategy):
         pending = 0
         level = np.nan
         age = 0
+        last_reason = "No breakout or retest confirmed on the latest closed bar."
         for i in range(self.regime_long * 4 + self.lookback + 5, n):
             a = float(atr.iloc[i]) if np.isfinite(atr.iloc[i]) else np.nan
-            if not np.isfinite(a) or a <= 0 or not self._in_overlap(df.index[i]):
+            if not np.isfinite(a) or a <= 0:
+                last_reason = "Volatility filter: ATR unavailable or zero."
+                pending = 0
+                continue
+            if not self._in_overlap(df.index[i]):
+                last_reason = "Session filter: outside London/New York overlap."
+                pending = 0
                 continue
             trend_up = (
                 fast.iloc[i] > slow.iloc[i] > long_ema.iloc[i]
@@ -141,6 +153,7 @@ class GoldSessionBreakRetest(Strategy):
                 and self.min_atr_percentile <= atr_pct.iloc[i] <= self.max_atr_percentile
             )
             if not regime_ok:
+                last_reason = "Regime filter: ADX or ATR percentile outside bounds."
                 pending = 0
                 continue
 
@@ -158,6 +171,7 @@ class GoldSessionBreakRetest(Strategy):
                         if self.min_risk_atr * a <= risk <= self.max_risk_atr * a:
                             out[i] = Signal(asset, Direction.BUY, c, round(sl, 5),
                                             round(c + self.rr * risk, 5), timeframe)
+                            last_reason = "Signal confirmed: bullish breakout retest."
                             pending = 0
                 elif pending == -1 and trend_down:
                     if c > level + self.retest_atr * a:
@@ -168,12 +182,16 @@ class GoldSessionBreakRetest(Strategy):
                         if self.min_risk_atr * a <= risk <= self.max_risk_atr * a:
                             out[i] = Signal(asset, Direction.SELL, c, round(sl, 5),
                                             round(c - self.rr * risk, 5), timeframe)
+                            last_reason = "Signal confirmed: bearish breakout retest."
                             pending = 0
 
             if pending == 0 and trend_up and c > float(prior_high.iloc[i]) + self.break_atr * a:
                 pending, level, age = 1, float(prior_high.iloc[i]), 0
+                last_reason = "Breakout detected: waiting for bullish retest."
             elif pending == 0 and trend_down and c < float(prior_low.iloc[i]) - self.break_atr * a:
                 pending, level, age = -1, float(prior_low.iloc[i]), 0
+                last_reason = "Breakout detected: waiting for bearish retest."
+        self.last_reason = last_reason
         return out
 
     def generate(self, asset: str, df: pd.DataFrame, timeframe: str) -> Signal | None:

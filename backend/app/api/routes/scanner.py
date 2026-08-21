@@ -57,3 +57,8 @@ def decisions(limit: int = 100, asset: str | None = None,
 @router.get("/blockers")
 def blockers(hours: int = 24) -> dict:
     return scanner_decisions.blocker_summary(hours=hours)
+
+
+@router.get("/diagnostics")
+def diagnostics(hours: int = 24) -> dict:
+    return scanner_decisions.blocker_summary(hours=hours)

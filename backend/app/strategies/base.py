@@ -20,6 +20,7 @@ from app.pipeline.context import Signal
 
 class Strategy(ABC):
     name: str = "strategy"
+    last_reason: str | None = None
 
     @abstractmethod
     def generate(self, asset: str, df: pd.DataFrame, timeframe: str) -> Signal | None:

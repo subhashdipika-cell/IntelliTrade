@@ -40,6 +40,20 @@ class ScannerDecisionStoreTests(unittest.TestCase):
         self.assertEqual(summary["blocked"], 1)
         self.assertEqual(summary["by_stage"], {"strategy": 1})
 
+    def test_blocker_summary_groups_diagnostic_reasons(self):
+        now = datetime.now(timezone.utc).isoformat()
+        self.store.append({"evaluated_at": now, "status": "blocked",
+                           "blocked_by": "strategy", "strategy": "Gold",
+                           "reason": "Session filter: outside London/New York overlap."})
+        self.store.append({"evaluated_at": now, "status": "blocked",
+                           "blocked_by": "strategy", "strategy": "BTC",
+                           "reason": "Regime filter: ADX or ATR percentile outside bounds."})
+        summary = self.store.blocker_summary(24)
+        self.assertEqual(summary["by_reason"], {
+            "session_filter": 1,
+            "regime_filter": 1,
+        })
+
 
 if __name__ == "__main__":
     unittest.main()
