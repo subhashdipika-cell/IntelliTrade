@@ -7,11 +7,11 @@ REM ============================================================
 
 echo Starting IntelliTrade...
 
-REM --- Clean up any previous IntelliTrade instance so ports 8100/3000 are free
+REM --- Clean up any previous IntelliTrade instance so ports 8100/3001 are free
 REM     (closes old windows AND kills orphaned node/python holding the ports). ---
 taskkill /fi "WindowTitle eq IntelliTrade Backend*" /f >nul 2>&1
 taskkill /fi "WindowTitle eq IntelliTrade Frontend*" /f >nul 2>&1
-powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8100,3000 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }" >nul 2>&1
+powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8100,3001 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 timeout /t 2 /nobreak >nul
 
 REM Backend (FastAPI + MT5 + monitor) on http://localhost:8100
@@ -24,17 +24,17 @@ powershell -NoProfile -Command "$deadline=(Get-Date).AddSeconds(60); do { try { 
 if errorlevel 1 goto backend_failed
 echo Backend is healthy.
 
-REM Frontend (Next.js UI) on http://localhost:3000
-start "IntelliTrade Frontend" cmd /c "cd /d D:\IntelliTrade\frontend && npm run dev"
+REM Frontend (Next.js UI) on http://localhost:3001
+start "IntelliTrade Frontend" cmd /c "cd /d D:\IntelliTrade\frontend && npm run dev -- --port 3001"
 
 REM Give the servers a moment, then open the dashboard in your browser
 timeout /t 12 /nobreak >nul
-start http://localhost:3000
+start http://localhost:3001
 
 echo.
 echo IntelliTrade is running in two windows:
 echo   Backend  - http://localhost:8100
-echo   Frontend - http://localhost:3000
+echo   Frontend - http://localhost:3001
 echo.
 echo To STOP IntelliTrade, close those two windows.
 echo This launcher window will now close.
