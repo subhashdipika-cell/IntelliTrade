@@ -1,6 +1,6 @@
 # EMA ATR ADX Trend Signals — historical backtest
 
-Date: 2026-08-28  
+Date: 2026-08-28
 Scope: historical research only; no deployment or profitability claim.
 
 ## Method
