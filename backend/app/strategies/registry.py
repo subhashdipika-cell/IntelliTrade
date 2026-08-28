@@ -11,6 +11,7 @@ from app.strategies.donchian_breakout import DonchianBreakout
 from app.strategies.eighty_twenty import EightyTwenty
 from app.strategies.ema_pullback import EmaPullback
 from app.strategies.ema_pullback_scalp import EmaPullbackScalp
+from app.strategies.ema_atr_adx_trend import EmaAtrAdxTrend
 from app.strategies.gold_m5_pullback import GoldM5Pullback
 from app.strategies.macd_cross import MacdCross
 from app.strategies.momentum_pinball import MomentumPinball
@@ -31,6 +32,7 @@ _REGISTRY: dict[str, type[Strategy]] = {
     "break_retest": BreakRetest,
     "ema_pullback": EmaPullback,
     "ema_pullback_scalp": EmaPullbackScalp,
+    "ema_atr_adx_trend": EmaAtrAdxTrend,
     "macd_cross": MacdCross,
     "rsi_reversion": RsiReversion,
     "bollinger_reversion": BollingerReversion,
