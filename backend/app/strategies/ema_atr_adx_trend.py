@@ -117,6 +117,13 @@ class EmaAtrAdxTrend(Strategy):
             "volume_average": volume_average,
         }
 
+    def _bar_filter(
+        self, asset: str, df: pd.DataFrame, series: dict[str, np.ndarray],
+        i: int, bullish: bool, bearish: bool, timeframe: str,
+    ) -> str | None:
+        """Optional specialization hook; the Pine port itself has no extra filter."""
+        return None
+
     def _scan(self, asset: str, df: pd.DataFrame, timeframe: str) -> list[Signal | None]:
         n = 0 if df is None else len(df)
         out: list[Signal | None] = [None] * n
@@ -144,6 +151,13 @@ class EmaAtrAdxTrend(Strategy):
             elif bearish and active_trend != -1:
                 active_trend = -1
                 signal_issued_in_trend = False
+
+            filter_reason = self._bar_filter(
+                asset, df, s, i, bullish, bearish, timeframe,
+            )
+            if filter_reason:
+                last_reason = filter_reason
+                continue
 
             close = float(s["close"][i])
             upper = slow + atr * self.atr_multiplier

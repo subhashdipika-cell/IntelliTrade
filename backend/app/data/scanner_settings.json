@@ -19,7 +19,8 @@
       "smc_confluence",
       "donchian_breakout",
       "break_retest",
-      "gold_session_break_retest"
+      "gold_session_break_retest",
+      "gold_h1_ema_atr_adx"
     ],
     "BTC": [
       "price_action_scalp",

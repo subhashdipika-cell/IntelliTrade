@@ -233,7 +233,11 @@ class SignalScanner:
         unavailable feed does not create a false claim that an event was absent.
         The strategy's ATR/ADX filters remain active as the deterministic fallback.
         """
-        if asset != "GOLD" or strategy != "gold_session_break_retest":
+        guarded_gold_strategies = {
+            "gold_session_break_retest",
+            "gold_h1_ema_atr_adx",
+        }
+        if asset != "GOLD" or strategy not in guarded_gold_strategies:
             return None
         try:
             from app.services.economic_calendar import get_events

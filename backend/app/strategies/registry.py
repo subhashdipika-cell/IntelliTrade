@@ -13,6 +13,7 @@ from app.strategies.ema_pullback import EmaPullback
 from app.strategies.ema_pullback_scalp import EmaPullbackScalp
 from app.strategies.ema_atr_adx_trend import EmaAtrAdxTrend
 from app.strategies.gold_m5_pullback import GoldM5Pullback
+from app.strategies.gold_h1_ema_atr_adx import GoldH1EmaAtrAdx
 from app.strategies.macd_cross import MacdCross
 from app.strategies.momentum_pinball import MomentumPinball
 from app.strategies.price_action_scalp import PriceActionScalp
@@ -37,6 +38,7 @@ _REGISTRY: dict[str, type[Strategy]] = {
     "rsi_reversion": RsiReversion,
     "bollinger_reversion": BollingerReversion,
     "gold_m5_pullback": GoldM5Pullback,
+    "gold_h1_ema_atr_adx": GoldH1EmaAtrAdx,
     "price_action_scalp": PriceActionScalp,
     "smt_gold_macd_trend": GoldMacdTrend,
     "gold_session_break_retest": GoldSessionBreakRetest,
