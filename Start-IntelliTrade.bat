@@ -20,7 +20,7 @@ start "IntelliTrade Backend" cmd /c "cd /d D:\IntelliTrade\backend && .venv\Scri
 
 REM Wait until FastAPI has completed startup before Next.js begins proxying API calls.
 echo Waiting for IntelliTrade backend health check...
-powershell -NoProfile -Command "$deadline=(Get-Date).AddSeconds(60); do { try { $response=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8100/api/health' -TimeoutSec 2; if ($response.StatusCode -eq 200) { exit 0 } } catch {}; Start-Sleep -Milliseconds 500 } while ((Get-Date) -lt $deadline); exit 1"
+powershell -NoProfile -Command "$deadline=(Get-Date).AddSeconds(120); do { try { $response=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8100/api/health' -TimeoutSec 2; if ($response.StatusCode -eq 200) { exit 0 } } catch {}; Start-Sleep -Milliseconds 500 } while ((Get-Date) -lt $deadline); exit 1"
 if errorlevel 1 goto backend_failed
 echo Backend is healthy.
 
@@ -42,7 +42,7 @@ exit
 
 :backend_failed
 echo.
-echo ERROR: IntelliTrade backend did not become healthy within 60 seconds.
+echo ERROR: IntelliTrade backend did not become healthy within 120 seconds.
 echo Review the IntelliTrade Backend window for the startup error.
 echo The frontend was not started because its API would be unavailable.
 echo.
