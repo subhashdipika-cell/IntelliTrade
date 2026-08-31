@@ -26,12 +26,12 @@ if errorlevel 1 (
 
 REM --- Reuse IntelliTrade listeners and preserve unrelated port owners. ---
 set "BACKEND_STATE=missing"
-powershell.exe -NoLogo -NoProfile -Command "$c=Get-NetTCPConnection -LocalPort 8100 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if(-not $c){exit 2}; $cmd=(Get-CimInstance Win32_Process -Filter \"ProcessId=$($c.OwningProcess)\" -ErrorAction SilentlyContinue).CommandLine; if($cmd -match 'IntelliTrade.+uvicorn main:app'){exit 0}; exit 1" >nul 2>&1
+powershell.exe -NoLogo -NoProfile -Command "$c=Get-NetTCPConnection -LocalPort 8100 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if(-not $c){exit 2}; $p=Get-CimInstance Win32_Process -Filter \"ProcessId=$($c.OwningProcess)\" -ErrorAction SilentlyContinue; $cmd=''; for($i=0; $p -and $i -lt 4; $i++){ $cmd += ' ' + $p.CommandLine; if(-not $p.ParentProcessId){break}; $p=Get-CimInstance Win32_Process -Filter \"ProcessId=$($p.ParentProcessId)\" -ErrorAction SilentlyContinue }; if($cmd -match 'IntelliTrade.+uvicorn main:app'){exit 0}; exit 1" >nul 2>&1
 if not errorlevel 1 set "BACKEND_STATE=ready"
 if errorlevel 1 if not errorlevel 2 set "BACKEND_STATE=conflict"
 
 set "FRONTEND_STATE=missing"
-powershell.exe -NoLogo -NoProfile -Command "$c=Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if(-not $c){exit 2}; $cmd=(Get-CimInstance Win32_Process -Filter \"ProcessId=$($c.OwningProcess)\" -ErrorAction SilentlyContinue).CommandLine; if($cmd -match 'IntelliTrade.+next'){exit 0}; exit 1" >nul 2>&1
+powershell.exe -NoLogo -NoProfile -Command "$c=Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; if(-not $c){exit 2}; $p=Get-CimInstance Win32_Process -Filter \"ProcessId=$($c.OwningProcess)\" -ErrorAction SilentlyContinue; $cmd=''; for($i=0; $p -and $i -lt 4; $i++){ $cmd += ' ' + $p.CommandLine; if(-not $p.ParentProcessId){break}; $p=Get-CimInstance Win32_Process -Filter \"ProcessId=$($p.ParentProcessId)\" -ErrorAction SilentlyContinue }; if($cmd -match 'IntelliTrade.+next'){exit 0}; exit 1" >nul 2>&1
 if not errorlevel 1 set "FRONTEND_STATE=ready"
 if errorlevel 1 if not errorlevel 2 set "FRONTEND_STATE=conflict"
 
