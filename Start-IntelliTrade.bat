@@ -64,9 +64,9 @@ REM Frontend (Next.js UI) on http://localhost:3001
 if "%FRONTEND_STATE%"=="ready" (
     echo Frontend is already running.
 ) else if /i "%TRADING_LAB_HIDDEN%"=="1" (
-    start "" /b cmd.exe /d /c "cd /d ""%FRONTEND%"" && npm.cmd run dev -- --port 3001 1^>^>""%LOGDIR%\frontend.log"" 2^>^&1"
+    start "" /b cmd.exe /d /c "cd /d ""%FRONTEND%"" && npm.cmd run dev -- --port 3001 --turbopack 1^>^>""%LOGDIR%\frontend.log"" 2^>^&1"
 ) else (
-    start "IntelliTrade Frontend" cmd.exe /k "cd /d ""%FRONTEND%"" && npm.cmd run dev -- --port 3001"
+    start "IntelliTrade Frontend" cmd.exe /k "cd /d ""%FRONTEND%"" && npm.cmd run dev -- --port 3001 --turbopack"
 )
 
 REM Give the servers a moment, then open the dashboard in your browser
@@ -85,7 +85,11 @@ exit
 :frontend_failed
 echo.
 echo ERROR: IntelliTrade frontend did not become healthy within 120 seconds.
-echo Review work\launcher-logs\frontend.log for the startup error.
+if /i "%TRADING_LAB_HIDDEN%"=="1" (
+    echo Review work\launcher-logs\frontend.log for the startup error.
+) else (
+    echo Review the IntelliTrade Frontend window for the startup error.
+)
 if /i not "%TRADING_LAB_HIDDEN%"=="1" pause
 exit /b 1
 
