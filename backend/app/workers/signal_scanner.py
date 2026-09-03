@@ -35,20 +35,36 @@ class SignalScanner:
 
     def __init__(self) -> None:
         self._last_bar: dict[str, str] = {}
+        self._scan_count = 0
+        self._last_scan_started_at: str | None = None
+        self._last_scan_completed_at: str | None = None
 
     def status(self) -> dict:
         s = scanner_settings.get()
-        return {"enabled": s.enabled, "mode": s.mode, "last_bars": dict(self._last_bar)}
+        return {
+            "enabled": s.enabled,
+            "mode": s.mode,
+            "scan_interval_seconds": 60,
+            "scan_count": self._scan_count,
+            "last_scan_started_at": self._last_scan_started_at,
+            "last_scan_completed_at": self._last_scan_completed_at,
+            "last_bars": dict(self._last_bar),
+        }
 
     def scan(self) -> None:
-        s = scanner_settings.get()
-        if not s.enabled:
-            return
-        for asset in s.assets:
-            try:
-                self._scan_asset(asset, s)
-            except Exception as exc:  # noqa: BLE001 — one asset must not kill the scan
-                log.warning("Scan failed for %s: %s", asset, exc)
+        self._last_scan_started_at = datetime.now(timezone.utc).isoformat()
+        try:
+            s = scanner_settings.get()
+            if not s.enabled:
+                return
+            for asset in s.assets:
+                try:
+                    self._scan_asset(asset, s)
+                except Exception as exc:  # noqa: BLE001 — one asset must not kill the scan
+                    log.warning("Scan failed for %s: %s", asset, exc)
+        finally:
+            self._scan_count += 1
+            self._last_scan_completed_at = datetime.now(timezone.utc).isoformat()
 
     def _scan_asset(self, asset: str, s) -> None:
         from app.strategies.registry import strategy_scan_timeframe

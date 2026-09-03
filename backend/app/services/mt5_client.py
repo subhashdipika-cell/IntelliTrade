@@ -101,14 +101,17 @@ class MT5Client:
     def connect(self) -> bool:
         if not MT5_AVAILABLE:
             return False
-        # Use the active profile's terminal (LIVE can have its own isolated
-        # install). If the path is wrong/missing, fall back to attaching to an
-        # already-running terminal (initialize() no-arg).
+        # Use the active profile's exact terminal (LIVE can have its own
+        # isolated install). A configured path is fail-closed: silently
+        # attaching to another running MT5 instance can route a valid signal to
+        # the wrong account.
         path = settings.terminal_path_for(account_state.active())
-        initialized = False
-        if path and os.path.exists(path):
+        if path:
+            if not os.path.exists(path):
+                log.error("Configured MT5 terminal not found: %s", path)
+                return False
             initialized = mt5.initialize(path=path)
-        if not initialized:
+        else:
             initialized = mt5.initialize()
         if not initialized:
             log.error("MT5 initialize failed: %s", mt5.last_error())

@@ -4,6 +4,8 @@
 Later: monthly model retrain + monthly journal analysis go here too."""
 from __future__ import annotations
 
+from datetime import datetime
+
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.core.logging_setup import get_logger
@@ -93,6 +95,8 @@ def start_scheduler() -> None:
         id="signal_scanner",
         max_instances=1,
         coalesce=True,
+        misfire_grace_time=SCAN_SECONDS,
+        next_run_time=datetime.now(),  # scan immediately, then every minute
     )
     _scheduler.add_job(
         _weekly_snapshot,
@@ -111,7 +115,7 @@ def start_scheduler() -> None:
         coalesce=True,
     )
     _scheduler.start()
-    log.info("Scheduler started (monitor %ss, scanner %ss, snapshot %sd, retrain %sd).",
+    log.info("Scheduler started (monitor %ss, scanner immediate then every %ss, snapshot %sd, retrain %sd).",
              POLL_SECONDS, SCAN_SECONDS, SNAPSHOT_DAYS, RETRAIN_DAYS)
 
 
