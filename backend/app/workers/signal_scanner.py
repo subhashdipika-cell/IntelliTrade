@@ -67,22 +67,31 @@ class SignalScanner:
             self._last_scan_completed_at = datetime.now(timezone.utc).isoformat()
 
     def _scan_asset(self, asset: str, s) -> None:
-        from app.strategies.registry import strategy_scan_timeframe
+        from app.strategies.registry import strategy_scan_lookback, strategy_scan_timeframe
 
         daily_loss = self._daily_loss_pct()
 
         # Per-asset strategy list when configured (backtest-driven selection),
         # else the global deployed list — see scanner_store.ScannerSettings.
-        asset_strategies = (getattr(s, "strategies_by_asset", None) or {}).get(asset) or s.strategies
+        overrides = getattr(s, "strategies_by_asset", None) or {}
+        # An explicit empty list disables an asset.  Previously ``or`` made an
+        # empty override fall back to the global strategy and trade anyway.
+        asset_strategies = overrides[asset] if asset in overrides else s.strategies
 
         # Bars are fetched per TIMEFRAME and cached — most strategies use the
         # global s.timeframe, but a strategy may declare its own (e.g. the M5
         # gold scalp), so we honour that without refetching for each strategy.
         df_cache: dict[str, object] = {}
+        lookback_by_tf: dict[str, int] = {}
+        for name in asset_strategies:
+            tf_name = strategy_scan_timeframe(name) or s.timeframe
+            lookback_by_tf[tf_name] = max(
+                lookback_by_tf.get(tf_name, 500), strategy_scan_lookback(name)
+            )
 
         def bars(tf: str):
             if tf not in df_cache:
-                d = mt5_client.fetch_ohlcv(asset, tf, 500)
+                d = mt5_client.fetch_ohlcv(asset, tf, lookback_by_tf.get(tf, 500))
                 df_cache[tf] = d.iloc[:-1] if (d is not None and len(d) >= 3) else None
             return df_cache[tf]
 

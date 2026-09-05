@@ -8,6 +8,7 @@ from app.strategies.base import Strategy
 from app.strategies.bollinger_reversion import BollingerReversion
 from app.strategies.break_retest import BreakRetest
 from app.strategies.donchian_breakout import DonchianBreakout
+from app.strategies.demo_m30_trend import BtcM30Trend, GoldM30Trend
 from app.strategies.ema_pullback import EmaPullback
 from app.strategies.ema_pullback_scalp import EmaPullbackScalp
 from app.strategies.gold_m5_pullback import GoldM5Pullback
@@ -25,6 +26,8 @@ _REGISTRY: dict[str, type[Strategy]] = {
     "rsi_reversion": RsiReversion,
     "bollinger_reversion": BollingerReversion,
     "gold_m5_pullback": GoldM5Pullback,
+    "gold_m30_trend": GoldM30Trend,
+    "btc_m30_trend": BtcM30Trend,
 }
 
 
@@ -38,6 +41,12 @@ def strategy_scan_timeframe(name: str) -> str | None:
     global one (class attribute, read without instantiating)."""
     cls = _REGISTRY.get(name)
     return getattr(cls, "scan_timeframe", None) if cls else None
+
+
+def strategy_scan_lookback(name: str) -> int:
+    """Number of completed bars required by a live strategy."""
+    cls = _REGISTRY.get(name)
+    return int(getattr(cls, "scan_lookback", 500) if cls else 500)
 
 
 def build_strategy(name: str, params: dict | None = None) -> Strategy:

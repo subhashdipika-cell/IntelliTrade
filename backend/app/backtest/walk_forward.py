@@ -15,7 +15,7 @@ def walk_forward(df: pd.DataFrame, strategy: Strategy, asset: str = "GOLD",
                  n_folds: int = 5, oos_fraction: float = 0.3,
                  initial_capital: float = 1000.0, spread: float = 0.0,
                  commission_pct: float = 0.0, commission_per_trade: float = 0.0,
-                 commission_per_lot: float = 0.0) -> dict:
+                 commission_per_lot: float = 0.0, timeframe: str = "H1") -> dict:
     """Rolling folds. Here the strategy is assumed pre-parameterized; the IS
     segment is the place to plug optimization later (grid / Bayesian) before
     scoring on the untouched OOS segment."""
@@ -36,6 +36,7 @@ def walk_forward(df: pd.DataFrame, strategy: Strategy, asset: str = "GOLD",
             oos, strategy, asset, initial_capital, spread=spread,
             commission_pct=commission_pct, commission_per_trade=commission_per_trade,
             commission_per_lot=commission_per_lot,
+            timeframe=timeframe,
         )
         folds.append({
             "fold": k + 1,

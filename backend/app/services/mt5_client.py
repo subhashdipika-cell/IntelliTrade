@@ -311,6 +311,11 @@ class MT5Client:
             "stops_level": info.trade_stops_level,
             "spread": info.spread,
             "volume_min": info.volume_min,
+            "volume_max": info.volume_max,
+            "volume_step": info.volume_step,
+            "trade_contract_size": info.trade_contract_size,
+            "trade_tick_size": info.trade_tick_size,
+            "trade_tick_value_loss": info.trade_tick_value_loss,
             "ask": tick.ask,
             "bid": tick.bid,
         }

@@ -13,6 +13,11 @@ from app.strategies.registry import build_strategy, list_strategies
 router = APIRouter(prefix="/backtest", tags=["backtest"])
 
 
+def _completed_bars(df, source: str):
+    """MT5's last row is the forming candle; research must not use it."""
+    return df.iloc[:-1] if source == "mt5" and df is not None and len(df) > 1 else df
+
+
 @router.get("/strategies")
 def strategies() -> dict:
     return {"strategies": list_strategies()}
@@ -56,7 +61,9 @@ def matrix(req: MatrixRequest) -> dict:
     strats = list_strategies()
     grid: dict[str, dict] = {}
     for asset in assets:
-        df = market_data.get_ohlcv(asset, req.timeframe, req.count, req.source)
+        df = _completed_bars(
+            market_data.get_ohlcv(asset, req.timeframe, req.count, req.source), req.source,
+        )
         per_lot = default_commission_per_lot(asset)
         grid[asset] = {}
         if df is None or len(df) == 0:
@@ -98,7 +105,9 @@ class BacktestRequest(BaseModel):
 
 @router.post("/run")
 def run(req: BacktestRequest) -> dict:
-    df = market_data.get_ohlcv(req.asset, req.timeframe, req.count, req.source)
+    df = _completed_bars(
+        market_data.get_ohlcv(req.asset, req.timeframe, req.count, req.source), req.source,
+    )
     if df is None or len(df) == 0:
         msg = ("No imported data — run 'Import from AlphaEdge' first."
                if req.source == "imported"
@@ -120,5 +129,6 @@ def run(req: BacktestRequest) -> dict:
             df, strategy, req.asset, initial_capital=req.initial_capital,
             spread=req.spread, commission_pct=req.commission_pct,
             commission_per_trade=req.commission_per_trade, commission_per_lot=per_lot,
+            timeframe=req.timeframe,
         )
     return payload

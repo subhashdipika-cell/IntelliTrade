@@ -28,7 +28,7 @@ class ScannerSettings:
     enabled: bool = False
     mode: str = "alert_only"
     assets: list[str] = field(default_factory=lambda: ["GOLD", "BTC", "ETH"])
-    strategies: list[str] = field(default_factory=lambda: ["donchian_breakout"])
+    strategies: list[str] = field(default_factory=list)
     timeframe: str = "H1"
     wiki_enabled: bool = True
     # Per-asset strategy selection — when an asset has an entry here it
@@ -36,7 +36,13 @@ class ScannerSettings:
     # after the 3000-bar H1 matrix backtest showed each asset has different
     # winners (e.g. macd_cross +21% on GOLD but -15% on BTC; rsi_reversion
     # +6.6% on ETH but -27.7% on GOLD). Empty dict = old behavior.
-    strategies_by_asset: dict = field(default_factory=dict)
+    strategies_by_asset: dict = field(default_factory=lambda: {
+        "GOLD": ["gold_m30_trend"],
+        "BTC": ["btc_m30_trend"],
+        # No ETH candidate passed the DEMO research gate; an explicit empty
+        # override keeps it disabled instead of falling back to a global rule.
+        "ETH": [],
+    })
 
 
 class ScannerStore:

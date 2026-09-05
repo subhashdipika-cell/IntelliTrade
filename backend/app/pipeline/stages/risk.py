@@ -4,6 +4,7 @@ Sizes the position, computes capital deployed, and enforces the daily-loss
 hard-stop — which can be overridden by the user's Money-Mgmt toggle."""
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 from app.pipeline.base import Stage
@@ -94,14 +95,58 @@ class RiskStage(Stage):
         total_capital = acct["equity"] if acct else None
         ctx.total_capital = total_capital
 
-        lots = self.cfg.lots_for(ctx.signal.asset)
+        configured_cap = self.cfg.lots_for(ctx.signal.asset)
+        lots, risk_reason = self._risk_sized_lots(ctx, configured_cap)
+        if lots is None:
+            ctx.record(Decision(self.name, Verdict.BLOCK, risk_reason))
+            return ctx
         ctx.signal.lots = lots
-        ctx.capital_deployed = self._estimate_capital(ctx.signal.entry, lots)
+        margin = mt5_client.calc_margin(
+            ctx.signal.asset, ctx.signal.direction.value, lots, ctx.signal.entry,
+        )
+        ctx.capital_deployed = round(margin, 2) if margin is not None else self._estimate_capital(
+            ctx.signal.entry, lots,
+        )
 
         ctx.record(Decision(self.name, Verdict.PASS,
-                            f"Sized {lots:g} lots for {ctx.signal.asset} "
+                            f"{risk_reason}; sized {lots:g} lots for {ctx.signal.asset} "
                             f"(~deployed {ctx.capital_deployed:.2f})."))
         return ctx
+
+    def _risk_sized_lots(self, ctx: TradeContext, configured_cap: float) -> tuple[float | None, str]:
+        """Size from stop distance and equity, with configured lots as a hard cap."""
+        sig = ctx.signal
+        spec = mt5_client.symbol_spec(sig.asset)
+        if spec is None or not ctx.total_capital:
+            return None, "Broker risk sizing unavailable; order refused"
+
+        tick_size = float(spec.get("trade_tick_size") or spec.get("point") or 0)
+        tick_value = float(spec.get("trade_tick_value_loss") or 0)
+        step = float(spec.get("volume_step") or spec.get("volume_min") or 0.01)
+        minimum = float(spec.get("volume_min") or step)
+        maximum = float(spec.get("volume_max") or configured_cap)
+        market_entry = float(spec["ask"] if sig.direction.value == "BUY" else spec["bid"])
+        stop_distance = abs(market_entry - float(sig.stop_loss))
+        risk_per_lot = (stop_distance / tick_size) * tick_value if tick_size > 0 else 0
+        budget = float(ctx.total_capital) * self.cfg.risk_per_trade_pct / 100.0
+        if risk_per_lot <= 0 or budget <= 0:
+            return None, "Invalid stop-risk inputs; order refused"
+
+        raw = min(budget / risk_per_lot, configured_cap, maximum)
+        lots = math.floor((raw + 1e-12) / step) * step
+        decimals = max(0, len(f"{step:.10f}".rstrip("0").split(".")[-1]))
+        lots = round(lots, decimals)
+        if lots < minimum:
+            min_risk = minimum * risk_per_lot
+            return None, (
+                f"Minimum {minimum:g} lot risks ~{min_risk:.2f}, above "
+                f"{self.cfg.risk_per_trade_pct:g}% budget {budget:.2f}; order refused"
+            )
+        estimated_risk = lots * risk_per_lot
+        return lots, (
+            f"stop-risk ~{estimated_risk:.2f}/{budget:.2f} budget "
+            f"({self.cfg.risk_per_trade_pct:g}% equity, cap {configured_cap:g})"
+        )
 
     def _estimate_capital(self, entry: float, lots: float) -> float:
         return round(entry * lots * self.cfg.contract_value_per_lot, 2)
