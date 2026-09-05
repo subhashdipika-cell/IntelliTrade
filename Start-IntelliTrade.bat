@@ -49,7 +49,7 @@ REM Port 8100 (not 8000) so it doesn't clash with Smart Money Trader's backend.
 if "%BACKEND_STATE%"=="ready" (
     echo Backend is already running.
 ) else if /i "%TRADING_LAB_HIDDEN%"=="1" (
-    powershell.exe -NoLogo -NoProfile -Command "Start-Process -FilePath '%BACKEND%\.venv\Scripts\python.exe' -ArgumentList '-m','uvicorn','main:app','--app-dir','%BACKEND%','--host','127.0.0.1','--port','8100' -WorkingDirectory '%BACKEND%' -WindowStyle Hidden -RedirectStandardOutput '%LOGDIR%\backend.out.log' -RedirectStandardError '%LOGDIR%\backend.err.log'"
+    start "" /b cmd.exe /d /c ""%BACKEND%\.venv\Scripts\python.exe" -m uvicorn main:app --app-dir "%BACKEND%" --host 127.0.0.1 --port 8100 1^>^>"%LOGDIR%\backend.out.log" 2^>^>"%LOGDIR%\backend.err.log""
 ) else (
     start "IntelliTrade Backend" cmd.exe /k "cd /d ""%BACKEND%"" && .venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8100"
 )
@@ -64,7 +64,7 @@ REM Frontend (Next.js UI) on http://localhost:3001
 if "%FRONTEND_STATE%"=="ready" (
     echo Frontend is already running.
 ) else if /i "%TRADING_LAB_HIDDEN%"=="1" (
-    powershell.exe -NoLogo -NoProfile -Command "Start-Process -FilePath 'npm.cmd' -ArgumentList 'run','dev','--','--port','3001','--turbopack' -WorkingDirectory '%FRONTEND%' -WindowStyle Hidden -RedirectStandardOutput '%LOGDIR%\frontend.out.log' -RedirectStandardError '%LOGDIR%\frontend.err.log'"
+    start "" /b cmd.exe /d /c "npm.cmd --prefix "%FRONTEND%" run dev -- --port 3001 --turbopack 1^>^>"%LOGDIR%\frontend.out.log" 2^>^>"%LOGDIR%\frontend.err.log""
 ) else (
     start "IntelliTrade Frontend" cmd.exe /k "cd /d ""%FRONTEND%"" && npm.cmd run dev -- --port 3001 --turbopack"
 )
