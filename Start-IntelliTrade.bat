@@ -2,8 +2,8 @@
 setlocal EnableExtensions
 REM ============================================================
 REM  IntelliTrade launcher
-REM  BEFORE running: open the Vantage MT5 terminal and log in to
-REM  your DEMO account (the app attaches to the running terminal).
+REM  The backend initializes the configured MT5 terminal. Reused
+REM  backend processes are checked for DEMO connectivity below.
 REM ============================================================
 
 echo Starting IntelliTrade...
@@ -47,7 +47,7 @@ if "%FRONTEND_STATE%"=="conflict" (
 REM Backend (FastAPI + MT5 + monitor) on http://localhost:8100
 REM Port 8100 (not 8000) so it doesn't clash with Smart Money Trader's backend.
 if "%BACKEND_STATE%"=="ready" (
-    echo Backend is already running.
+    echo Backend is already running, possibly hidden. Checking its MT5 connection.
 ) else if /i "%TRADING_LAB_HIDDEN%"=="1" (
     start "" /b cmd.exe /d /c ""%BACKEND%\.venv\Scripts\python.exe" -m uvicorn main:app --app-dir "%BACKEND%" --host 127.0.0.1 --port 8100 1^>^>"%LOGDIR%\backend.out.log" 2^>^>"%LOGDIR%\backend.err.log""
 ) else (
@@ -58,7 +58,9 @@ REM Wait until FastAPI has completed startup before Next.js begins proxying API 
 echo Waiting for IntelliTrade backend health check...
 powershell.exe -NoProfile -Command "$deadline=(Get-Date).AddSeconds(120); do { try { $response=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:8100/api/health' -TimeoutSec 2; if ($response.StatusCode -eq 200) { exit 0 } } catch {}; Start-Sleep -Milliseconds 500 } while ((Get-Date) -lt $deadline); exit 1"
 if errorlevel 1 goto backend_failed
-echo Backend is healthy.
+echo Backend HTTP service is available.
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%ROOT%Ensure-IntelliTradeConnection.ps1"
+if errorlevel 1 goto mt5_failed
 
 REM Frontend (Next.js UI) on http://localhost:3001
 if "%FRONTEND_STATE%"=="ready" (
@@ -74,7 +76,7 @@ powershell.exe -NoLogo -NoProfile -Command "$deadline=(Get-Date).AddSeconds(120)
 if errorlevel 1 goto frontend_failed
 
 echo.
-echo IntelliTrade is running in two windows:
+echo IntelliTrade services are running; reused or hidden services may have no console window:
 echo   Backend  - http://localhost:8100
 echo   Frontend - http://localhost:3001
 echo.
@@ -90,6 +92,13 @@ if /i "%TRADING_LAB_HIDDEN%"=="1" (
 ) else (
     echo Review the IntelliTrade Frontend window for the startup error.
 )
+if /i not "%TRADING_LAB_HIDDEN%"=="1" pause
+exit /b 1
+
+:mt5_failed
+echo.
+echo ERROR: IntelliTrade cannot verify its MT5 DEMO connection.
+echo Startup was not declared successful. Review the connection error above.
 if /i not "%TRADING_LAB_HIDDEN%"=="1" pause
 exit /b 1
 
