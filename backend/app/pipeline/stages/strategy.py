@@ -31,8 +31,22 @@ class StrategyStage(Stage):
             self.name, Verdict.PASS,
             f"{self.strategy.name}: {signal.direction.value} @ {signal.entry:g}",
         ))
-        self._cap_target_to_structure(ctx)
-        self._human_touch(ctx)
+        from app.strategies.demo_m30_trend import GoldM30Trend, BtcM30Trend
+        from app.services.mt5_client import mt5_client
+
+        if isinstance(self.strategy, (GoldM30Trend, BtcM30Trend)):
+            # These trend systems were researched with fixed ATR brackets.
+            # Generic range-trading walls rejected 209/210 historical signals.
+            # This exception is restricted to broker-verified DEMO execution.
+            if mt5_client.verify_account_type() != "DEMO":
+                ctx.record(Decision(self.name, Verdict.BLOCK,
+                                    "M30 trend deployment requires a verified DEMO account."))
+                return ctx
+            ctx.record(Decision(self.name, Verdict.INFO,
+                                "DEMO M30 trend: preserving researched ATR stop and 2.2R target; generic structure overlays not applied."))
+        else:
+            self._cap_target_to_structure(ctx)
+            self._human_touch(ctx)
         return ctx
 
     def _human_touch(self, ctx: TradeContext) -> None:

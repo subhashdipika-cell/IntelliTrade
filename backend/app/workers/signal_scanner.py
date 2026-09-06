@@ -133,6 +133,7 @@ class SignalScanner:
                     include_execution=False,
                 )
                 ctx = pipeline.run(ctx)
+                self._record_evaluation(key, str(sub.index[-1]), ctx)
                 if ctx.blocked or ctx.signal is None:
                     continue
 
@@ -155,6 +156,29 @@ class SignalScanner:
                     log.info("ALERT-ONLY setup [%s]: %s %s @ %s",
                              ctx.strategy, ctx.signal.direction.value, asset, ctx.signal.entry)
                 break  # one action per strategy per scan — guardrails stay simple
+
+    @staticmethod
+    def _record_evaluation(key, bar, ctx):
+        """Bounded durable audit of evaluated signals, including no-setup bars."""
+        import json
+        import logging
+        from logging.handlers import RotatingFileHandler
+        from pathlib import Path
+        try:
+            audit = logging.getLogger("scanner.decision_audit")
+            if not audit.handlers:
+                path = Path(__file__).resolve().parents[1] / "data" / "scanner_evaluations.jsonl"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                handler = RotatingFileHandler(path, maxBytes=5_000_000, backupCount=3, encoding="utf-8")
+                handler.setFormatter(logging.Formatter("%(message)s"))
+                audit.addHandler(handler)
+                audit.setLevel(logging.INFO)
+                audit.propagate = False
+            audit.info(json.dumps({"at": datetime.now(timezone.utc).isoformat(),
+                                   "key": key, "bar": bar, "blocked": ctx.blocked,
+                                   "signal": ctx.signal is not None, "decisions": ctx.explain()}))
+        except Exception:
+            log.exception("Could not persist scanner evaluation")
 
     def _maybe_execute(self, asset: str, ctx: TradeContext) -> None:
         # Guardrail: one open position per asset.
