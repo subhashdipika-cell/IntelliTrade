@@ -53,4 +53,11 @@ for r in (live.router, backtest.router, account.router, journal.router,
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"status": "ok", "app": "IntelliTrade"}
+    # HTTP 200 remains process liveness so the launcher can open the dashboard
+    # for troubleshooting. Read the payload for broker readiness.
+    connection = mt5_client.connection_health()
+    return {
+        "status": "ok" if connection["connected"] else "degraded",
+        "app": "IntelliTrade",
+        "mt5": connection,
+    }

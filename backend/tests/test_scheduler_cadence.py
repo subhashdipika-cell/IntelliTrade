@@ -55,6 +55,7 @@ class TerminalBindingTests(unittest.TestCase):
         fake_mt5 = SimpleNamespace(
             initialize=unittest.mock.Mock(return_value=False),
             last_error=unittest.mock.Mock(return_value=(-10004, "No IPC connection")),
+            shutdown=unittest.mock.Mock(),
         )
         client = mt5_module.MT5Client()
         terminal = r"D:\MT5IntelliTrade\terminal64.exe"
@@ -62,6 +63,7 @@ class TerminalBindingTests(unittest.TestCase):
         with (
             patch.object(mt5_module, "MT5_AVAILABLE", True),
             patch.object(mt5_module, "mt5", fake_mt5),
+            patch.object(mt5_module.time, "sleep"),
             patch.object(mt5_module.os.path, "exists", return_value=True),
             patch.object(
                 type(mt5_module.settings),
@@ -71,7 +73,11 @@ class TerminalBindingTests(unittest.TestCase):
         ):
             self.assertFalse(client.connect())
 
-        fake_mt5.initialize.assert_called_once_with(path=terminal)
+        self.assertEqual(fake_mt5.initialize.call_count, 3)
+        for call in fake_mt5.initialize.call_args_list:
+            self.assertEqual(call.args, (terminal,))
+            self.assertEqual(call.kwargs, {"timeout": 20000})
+        self.assertEqual(fake_mt5.shutdown.call_count, 3)
 
 
 class ScannerHeartbeatTests(unittest.TestCase):
