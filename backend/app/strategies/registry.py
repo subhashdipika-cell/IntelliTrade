@@ -5,6 +5,7 @@ introduced now that there are two strategies and the seam is real.)"""
 from __future__ import annotations
 
 from app.strategies.base import Strategy
+from app.strategies.alternate_research import GoldRangeReversal, BtcSqueezeBreakout
 from app.strategies.continuation_research import GoldContinuation, BtcContinuation
 from app.strategies.bollinger_reversion import BollingerReversion
 from app.strategies.break_retest import BreakRetest
@@ -18,6 +19,8 @@ from app.strategies.rsi_reversion import RsiReversion
 from app.strategies.sma_crossover import SmaCrossover
 
 _REGISTRY: dict[str, type[Strategy]] = {
+    "gold_range_reversal_research": GoldRangeReversal,
+    "btc_squeeze_breakout_research": BtcSqueezeBreakout,
     "gold_continuation_research": GoldContinuation,
     "btc_continuation_research": BtcContinuation,
     "sma_crossover": SmaCrossover,

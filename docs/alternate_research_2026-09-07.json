@@ -1,0 +1,247 @@
+{
+  "design": "Fixed rules; 50% development, 25% validation, 25% holdout. No optimization.",
+  "limitations": "Swap/funding and live trailing/news filters excluded; historical bid OHLC, current contract specs and fixed spread assumptions. Holdout is not fresh unseen forward data.",
+  "gate": "Validation and holdout each >=20 closed trades, PF >=1.2 at 1x, PF >=1 at 2x, DD <=5%, plus positive return; no promotion based on frequency alone.",
+  "assets": {
+    "GOLD": {
+      "start": "2025-10-30 18:00:00",
+      "end": "2026-09-07 05:00:00",
+      "bars": 9999,
+      "eligible": false,
+      "results": {
+        "candidate": {
+          "development": {
+            "1": {
+              "trades": 18,
+              "return_pct": 1.899,
+              "profit_factor": 1.447,
+              "win_rate": 44.44,
+              "max_drawdown_pct": 1.181,
+              "minimum_lot_rejections": 0
+            },
+            "2": {
+              "trades": 18,
+              "return_pct": 1.858,
+              "profit_factor": 1.435,
+              "win_rate": 44.44,
+              "max_drawdown_pct": 1.198,
+              "minimum_lot_rejections": 0
+            }
+          },
+          "validation": {
+            "1": {
+              "trades": 13,
+              "return_pct": -1.736,
+              "profit_factor": 0.605,
+              "win_rate": 23.08,
+              "max_drawdown_pct": 2.56,
+              "minimum_lot_rejections": 0
+            },
+            "2": {
+              "trades": 13,
+              "return_pct": -1.766,
+              "profit_factor": 0.6,
+              "win_rate": 23.08,
+              "max_drawdown_pct": 2.584,
+              "minimum_lot_rejections": 0
+            }
+          },
+          "holdout": {
+            "1": {
+              "trades": 11,
+              "return_pct": 0.471,
+              "profit_factor": 1.167,
+              "win_rate": 36.36,
+              "max_drawdown_pct": 1.393,
+              "minimum_lot_rejections": 0
+            },
+            "2": {
+              "trades": 11,
+              "return_pct": 0.446,
+              "profit_factor": 1.157,
+              "win_rate": 36.36,
+              "max_drawdown_pct": 1.401,
+              "minimum_lot_rejections": 0
+            }
+          }
+        },
+        "baseline": {
+          "development": {
+            "1": {
+              "trades": 40,
+              "return_pct": 5.52,
+              "profit_factor": 1.574,
+              "win_rate": 42.5,
+              "max_drawdown_pct": 2.562,
+              "minimum_lot_rejections": 4
+            },
+            "2": {
+              "trades": 40,
+              "return_pct": 5.452,
+              "profit_factor": 1.565,
+              "win_rate": 42.5,
+              "max_drawdown_pct": 2.575,
+              "minimum_lot_rejections": 4
+            }
+          },
+          "validation": {
+            "1": {
+              "trades": 33,
+              "return_pct": -1.378,
+              "profit_factor": 0.861,
+              "win_rate": 30.3,
+              "max_drawdown_pct": 4.305,
+              "minimum_lot_rejections": 0
+            },
+            "2": {
+              "trades": 33,
+              "return_pct": -1.426,
+              "profit_factor": 0.857,
+              "win_rate": 30.3,
+              "max_drawdown_pct": 4.33,
+              "minimum_lot_rejections": 0
+            }
+          },
+          "holdout": {
+            "1": {
+              "trades": 23,
+              "return_pct": 5.285,
+              "profit_factor": 2.002,
+              "win_rate": 47.83,
+              "max_drawdown_pct": 1.686,
+              "minimum_lot_rejections": 0
+            },
+            "2": {
+              "trades": 23,
+              "return_pct": 5.023,
+              "profit_factor": 1.947,
+              "win_rate": 47.83,
+              "max_drawdown_pct": 1.699,
+              "minimum_lot_rejections": 0
+            }
+          }
+        }
+      }
+    },
+    "BTC": {
+      "start": "2026-02-10 04:00:00",
+      "end": "2026-09-07 05:00:00",
+      "bars": 9999,
+      "eligible": false,
+      "results": {
+        "candidate": {
+          "development": {
+            "1": {
+              "trades": 54,
+              "return_pct": -3.629,
+              "profit_factor": 0.806,
+              "win_rate": 25.93,
+              "max_drawdown_pct": 7.501,
+              "minimum_lot_rejections": 0
+            },
+            "2": {
+              "trades": 54,
+              "return_pct": -3.984,
+              "profit_factor": 0.787,
+              "win_rate": 25.93,
+              "max_drawdown_pct": 7.84,
+              "minimum_lot_rejections": 0
+            }
+          },
+          "validation": {
+            "1": {
+              "trades": 14,
+              "return_pct": -1.981,
+              "profit_factor": 0.617,
+              "win_rate": 21.43,
+              "max_drawdown_pct": 2.341,
+              "minimum_lot_rejections": 0
+            },
+            "2": {
+              "trades": 14,
+              "return_pct": -2.127,
+              "profit_factor": 0.597,
+              "win_rate": 21.43,
+              "max_drawdown_pct": 2.467,
+              "minimum_lot_rejections": 0
+            }
+          },
+          "holdout": {
+            "1": {
+              "trades": 21,
+              "return_pct": -2.884,
+              "profit_factor": 0.551,
+              "win_rate": 19.05,
+              "max_drawdown_pct": 4.853,
+              "minimum_lot_rejections": 0
+            },
+            "2": {
+              "trades": 20,
+              "return_pct": -3.124,
+              "profit_factor": 0.518,
+              "win_rate": 20.0,
+              "max_drawdown_pct": 4.986,
+              "minimum_lot_rejections": 0
+            }
+          }
+        },
+        "baseline": {
+          "development": {
+            "1": {
+              "trades": 50,
+              "return_pct": 6.278,
+              "profit_factor": 1.448,
+              "win_rate": 42.0,
+              "max_drawdown_pct": 3.692,
+              "minimum_lot_rejections": 0
+            },
+            "2": {
+              "trades": 50,
+              "return_pct": 3.818,
+              "profit_factor": 1.263,
+              "win_rate": 40.0,
+              "max_drawdown_pct": 5.263,
+              "minimum_lot_rejections": 0
+            }
+          },
+          "validation": {
+            "1": {
+              "trades": 21,
+              "return_pct": -2.194,
+              "profit_factor": 0.695,
+              "win_rate": 28.57,
+              "max_drawdown_pct": 6.131,
+              "minimum_lot_rejections": 0
+            },
+            "2": {
+              "trades": 21,
+              "return_pct": -3.337,
+              "profit_factor": 0.559,
+              "win_rate": 23.81,
+              "max_drawdown_pct": 7.095,
+              "minimum_lot_rejections": 0
+            }
+          },
+          "holdout": {
+            "1": {
+              "trades": 28,
+              "return_pct": 3.569,
+              "profit_factor": 1.505,
+              "win_rate": 42.86,
+              "max_drawdown_pct": 2.865,
+              "minimum_lot_rejections": 0
+            },
+            "2": {
+              "trades": 25,
+              "return_pct": 0.696,
+              "profit_factor": 1.095,
+              "win_rate": 36.0,
+              "max_drawdown_pct": 3.986,
+              "minimum_lot_rejections": 0
+            }
+          }
+        }
+      }
+    }
+  }
+}

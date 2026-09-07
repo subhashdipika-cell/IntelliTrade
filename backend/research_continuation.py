@@ -73,7 +73,9 @@ def simulate(df, signals, spec, asset, start, end, multiplier):
                 max_drawdown_pct=round(drawdown,3), minimum_lot_rejections=rejected)
 
 
-def main():
+def main(pairs=None, report_name='continuation_research_2026-09-07.json'):
+    if pairs is None:
+        pairs = [('GOLD', GoldContinuation(), GoldM30Trend()), ('BTC', BtcContinuation(), BtcM30Trend())]
     if not mt5_client.connect() or mt5_client.verify_account_type() != 'DEMO':
         raise RuntimeError('Research requires DEMO data connection')
     report = {'design': 'Fixed rules; 50% development, 25% validation, 25% holdout. No optimization.',
@@ -81,7 +83,7 @@ def main():
               'gate': 'Validation and holdout each >=20 closed trades, PF >=1.2 at 1x, PF >=1 at 2x, DD <=5%, plus positive return; no promotion based on frequency alone.',
               'assets': {}}
     try:
-        for asset, candidate, baseline in [('GOLD', GoldContinuation(), GoldM30Trend()), ('BTC', BtcContinuation(), BtcM30Trend())]:
+        for asset, candidate, baseline in pairs:
             df = mt5_client.fetch_ohlcv(asset, 'M30', 10000).iloc[:-1]
             if len(df)<4000 or not df.index.is_monotonic_increasing or df.index.has_duplicates:
                 raise RuntimeError('Insufficient or malformed data')
@@ -103,7 +105,7 @@ def main():
                          for part in ['validation','holdout'])
             report['assets'][asset] = dict(start=str(df.index[0]),end=str(df.index[-1]), bars=n,
                                           eligible=passed,results=results)
-        Path('../docs/continuation_research_2026-09-07.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
+        (Path(__file__).resolve().parent.parent / 'docs' / report_name).write_text(json.dumps(report,indent=2),encoding='utf-8')
         print(json.dumps(report,indent=2))
     finally:
         mt5_client.shutdown()
