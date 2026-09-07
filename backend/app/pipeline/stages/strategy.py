@@ -21,6 +21,10 @@ class StrategyStage(Stage):
 
     def process(self, ctx: TradeContext) -> TradeContext:
         ctx.strategy = self.strategy.name
+        if getattr(self.strategy, "research_only", False):
+            ctx.record(Decision(self.name, Verdict.BLOCK,
+                                "Research candidate: autonomous execution is not approved."))
+            return ctx
         signal = self.strategy.generate(ctx.asset, ctx.market_data, ctx.timeframe)
         if signal is None:
             ctx.record(Decision(self.name, Verdict.BLOCK,
