@@ -10,6 +10,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   health: () => request("/health"),
+  scannerStatus: () => request("/scanner/status"),
   accountInfo: () => request("/account/info"),
   switchAccount: (target: "DEMO" | "LIVE") =>
     request("/account/switch", { method: "POST", body: JSON.stringify({ target }) }),

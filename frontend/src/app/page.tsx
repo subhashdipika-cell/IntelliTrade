@@ -4,6 +4,30 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { SessionBar } from "@/components/SessionBar";
 
+interface RuntimeHealth {
+  status: "ok" | "degraded";
+  mt5?: { connected?: boolean; verified_type?: string | null };
+}
+
+interface ScannerRuntime {
+  enabled: boolean;
+  mode: "alert_only" | "autonomous";
+  scan_interval_seconds: number;
+  scan_count: number;
+  last_scan_completed_at: string | null;
+}
+
+interface ScannerConfig {
+  assets: string[];
+  strategies: string[];
+  strategies_by_asset?: Record<string, string[]>;
+  timeframe: string;
+}
+
+interface MonitoredRuntime {
+  count: number;
+}
+
 const TV = {
   BTC: "BINANCE:BTCUSDT",
   ETH: "BINANCE:ETHUSDT",
@@ -11,23 +35,44 @@ const TV = {
 } as const;
 
 export default function Dashboard() {
-  const [health, setHealth] = useState<string>("checking…");
+  const [health, setHealth] = useState<RuntimeHealth | null>(null);
+  const [apiOnline, setApiOnline] = useState<boolean | null>(null);
+  const [scanner, setScanner] = useState<ScannerRuntime | null>(null);
+  const [scannerConfig, setScannerConfig] = useState<ScannerConfig | null>(null);
+  const [monitored, setMonitored] = useState<MonitoredRuntime | null>(null);
   const [now, setNow] = useState<string>("");
 
-  // Poll health instead of a one-shot check on mount: the frontend boots
-  // faster than the Python backend, so a single check on load caught it before
-  // it was ready and stuck on OFFLINE until a manual refresh. Polling auto-
-  // flips to ONLINE within a few seconds of the backend coming up (and back to
-  // OFFLINE if it later drops).
+  // Poll after startup and keep the broker, scanner, and tracked-position
+  // indicators current while the dashboard stays open.
   useEffect(() => {
     let alive = true;
-    const check = () =>
-      api
-        .health()
-        .then(() => alive && setHealth("ONLINE"))
-        .catch(() => alive && setHealth("OFFLINE (start backend on :8100)"));
+    const check = async () => {
+      try {
+        const result = (await api.health()) as RuntimeHealth;
+        if (alive) {
+          setHealth(result);
+          setApiOnline(true);
+        }
+      } catch {
+        if (alive) {
+          setApiOnline(false);
+          setHealth(null);
+        }
+      }
+      const [scannerResult, configResult, monitoredResult] = await Promise.allSettled([
+        api.scannerStatus(),
+        api.scannerSettings(),
+        api.monitored(),
+      ]);
+      if (!alive) return;
+      if (scannerResult.status === "fulfilled") setScanner(scannerResult.value as ScannerRuntime);
+      if (configResult.status === "fulfilled") {
+        setScannerConfig((configResult.value as { settings: ScannerConfig }).settings);
+      }
+      if (monitoredResult.status === "fulfilled") setMonitored(monitoredResult.value as MonitoredRuntime);
+    };
     check();
-    const t = setInterval(check, 3000);
+    const t = setInterval(check, 10000);
     return () => {
       alive = false;
       clearInterval(t);
@@ -42,7 +87,28 @@ export default function Dashboard() {
     return () => clearInterval(t);
   }, []);
 
-  const online = health === "ONLINE";
+  const online = apiOnline === true;
+  const mt5Connected = health?.mt5?.connected === true;
+  const verifiedType = health?.mt5?.verified_type;
+  const scanAgeMs = scanner?.last_scan_completed_at
+    ? Date.now() - new Date(scanner.last_scan_completed_at).getTime()
+    : null;
+  const scanIsFresh = scanAgeMs !== null && scanAgeMs <= Math.max(180, (scanner?.scan_interval_seconds ?? 60) * 3) * 1000;
+  const deployedStrategies = scannerConfig
+    ? scannerConfig.assets.flatMap((asset) => {
+        const selected = scannerConfig.strategies_by_asset?.[asset] ?? scannerConfig.strategies;
+        return selected.map((strategy) => `${asset}: ${strategy}`);
+      })
+    : [];
+
+  const formatTime = (value: string | null | undefined) =>
+    value
+      ? new Date(value).toLocaleString("en-IN", {
+          timeZone: "Asia/Kolkata",
+          dateStyle: "medium",
+          timeStyle: "short",
+        })
+      : "No completed scan yet";
 
   return (
     <div className="p-6 space-y-6">
@@ -82,14 +148,64 @@ export default function Dashboard() {
             }`}
           >
             <span
-              className={`h-2 w-2 rounded-full ${online ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`}
+              className={`h-2 w-2 rounded-full ${apiOnline === null ? "bg-amber-500" : online ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`}
             />
-            <span className={`text-xs font-medium ${online ? "text-emerald-400" : "text-rose-400"}`}>
-              {online ? "Backend Online" : health}
+            <span className={`text-xs font-medium ${apiOnline === null ? "text-amber-400" : online ? "text-emerald-400" : "text-rose-400"}`}>
+              {apiOnline === null ? "Checking backend…" : online ? "Backend online" : "Backend offline — start :8100"}
             </span>
           </div>
         </div>
       </header>
+
+      <section aria-label="Runtime readiness" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div className="bg-[#0a0d12] border border-gray-800 rounded-xl p-4">
+          <p className="text-[10px] uppercase tracking-wider text-gray-500">MT5 connection</p>
+          <p className={`mt-2 text-sm font-semibold ${mt5Connected ? verifiedType === "DEMO" ? "text-emerald-400" : "text-amber-400" : "text-rose-400"}`}>
+            {!online ? "Backend unavailable" : !mt5Connected ? "Disconnected" : `${verifiedType ?? "Connected"} account`}
+          </p>
+          <p className="mt-1 text-[11px] text-gray-500">
+            {mt5Connected && verifiedType === "DEMO" ? "Broker connection verified as DEMO." : mt5Connected ? "Check the account type before enabling autonomous trading." : "Backend liveness does not mean the broker is ready."}
+          </p>
+        </div>
+
+        <div className="bg-[#0a0d12] border border-gray-800 rounded-xl p-4">
+          <p className="text-[10px] uppercase tracking-wider text-gray-500">Auto-scanner</p>
+          <p className={`mt-2 text-sm font-semibold ${scanner?.enabled ? scanner.mode === "autonomous" ? "text-rose-400" : "text-indigo-300" : "text-gray-400"}`}>
+            {!scanner ? "Checking…" : !scanner.enabled ? "Disabled" : scanner.mode === "autonomous" ? "Autonomous — automatic orders" : "Alert-only"}
+          </p>
+          <p className="mt-1 text-[11px] text-gray-500">
+            {scanner ? `${scanner.scan_count} scan cycles · ${scanner.enabled ? scanIsFresh ? "recent scan" : "scan stale or waiting" : "not scanning while disabled"}` : "Scanner status unavailable."}
+          </p>
+        </div>
+
+        <div className="bg-[#0a0d12] border border-gray-800 rounded-xl p-4">
+          <p className="text-[10px] uppercase tracking-wider text-gray-500">Last scan completed</p>
+          <p className={`mt-2 text-sm font-semibold ${scanner?.enabled && !scanIsFresh ? "text-amber-400" : "text-gray-200"}`}>
+            {formatTime(scanner?.last_scan_completed_at)}
+          </p>
+          {scanner?.enabled && !scanIsFresh && <p className="mt-1 text-[11px] text-amber-400">No completed scan in the last 3 minutes.</p>}
+        </div>
+
+        <div className="bg-[#0a0d12] border border-gray-800 rounded-xl p-4">
+          <p className="text-[10px] uppercase tracking-wider text-gray-500">Monitored positions</p>
+          <p className="mt-2 text-sm font-semibold text-gray-200">{monitored ? monitored.count : "—"}</p>
+          <p className="mt-1 text-[11px] text-gray-500">Positions currently tracked for close monitoring.</p>
+        </div>
+      </section>
+
+      <section className="bg-[#0a0d12] border border-gray-800 rounded-xl p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">Scanner deployment</h3>
+          {scannerConfig && <span className="text-[11px] text-gray-500">Configured timeframe: {scannerConfig.timeframe}</span>}
+        </div>
+        {deployedStrategies.length ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {deployedStrategies.map((item) => <span key={item} className="rounded-md border border-gray-800 bg-[#0d1117] px-2.5 py-1.5 text-xs text-gray-300">{item}</span>)}
+          </div>
+        ) : (
+          <p className="mt-2 text-xs text-gray-500">No strategies are assigned to the configured assets.</p>
+        )}
+      </section>
 
       <SessionBar />
 
